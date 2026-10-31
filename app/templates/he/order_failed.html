@@ -1,0 +1,15 @@
+{% extends "he/base.html" %}
+{% block title %}התשלום לא הושלם · לחם בהר{% endblock %}
+
+{% block content %}
+  <section class="shell confirm">
+    <p class="kicker">התשלום לא הושלם</p>
+    <h1>הכיכרות לא נשמרו.</h1>
+    {% if order %}
+      <p class="lede">{{ order.order_number }} לא שולמה. המשלוח הזה פנוי להזמנה אחרת.</p>
+    {% else %}
+      <p class="lede">התשלום לא עבר.</p>
+    {% endif %}
+    <p><a class="pay-button" href="/?lang=he">חזרה לדף הבית</a></p>
+  </section>
+{% endblock %}

@@ -1,0 +1,15 @@
+{% extends "en/base.html" %}
+{% block title %}Payment not completed · לחם בהר{% endblock %}
+
+{% block content %}
+  <section class="shell confirm">
+    <p class="kicker">Payment not completed</p>
+    <h1>Those loaves were not reserved.</h1>
+    {% if order %}
+      <p class="lede">{{ order.order_number }} was not paid. This delivery is open for another order.</p>
+    {% else %}
+      <p class="lede">The payment did not go through.</p>
+    {% endif %}
+    <p><a class="pay-button" href="/?lang=en">Back to home</a></p>
+  </section>
+{% endblock %}

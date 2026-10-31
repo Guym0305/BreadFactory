@@ -1,0 +1,15 @@
+{% extends "en/base.html" %}
+{% block title %}Development payment · לחם בהר{% endblock %}
+{% block body_class %}is-mock{% endblock %}
+
+{% block content %}
+  <section class="shell mock-pay">
+    <p class="kicker">Development payment</p>
+    <h1>No card is collected.</h1>
+    <p class="lede">Grow is not connected in this environment, so this stand-in confirms {{ order.order_number }} for {{ order.total_amount|money }} without taking a card number.</p>
+    <form method="post" action="/pay/mock/{{ order.order_number }}/complete" target="_top">
+      <input type="hidden" name="lang" value="en">
+      <button class="pay-button" type="submit">Confirm payment</button>
+    </form>
+  </section>
+{% endblock %}

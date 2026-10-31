@@ -1,0 +1,15 @@
+{% extends "he/base.html" %}
+{% block title %}תשלום לפיתוח · לחם בהר{% endblock %}
+{% block body_class %}is-mock{% endblock %}
+
+{% block content %}
+  <section class="shell mock-pay">
+    <p class="kicker">תשלום לפיתוח</p>
+    <h1>לא נאסף כרטיס.</h1>
+    <p class="lede">Grow לא מחובר בסביבה הזו, ולכן המסך הזה מאשר את {{ order.order_number }} על סך {{ order.total_amount|money }} בלי לקחת מספר כרטיס.</p>
+    <form method="post" action="/pay/mock/{{ order.order_number }}/complete" target="_top">
+      <input type="hidden" name="lang" value="he">
+      <button class="pay-button" type="submit">אישור תשלום</button>
+    </form>
+  </section>
+{% endblock %}

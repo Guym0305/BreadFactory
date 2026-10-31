@@ -1,0 +1,22 @@
+---
+description: When the user says Push Git or Sync Remote, commit, push, and sync with the remote
+alwaysApply: true
+---
+
+# Push Git and Sync Remote
+
+When the user message is or contains **Push Git** or **Sync Remote** (any capitalization), that message is the request to publish the current work. Do it in this chat. Do not ask for a second confirmation.
+
+1. In parallel, run `git status`, `git diff` (staged and unstaged), and `git log -5 --oneline`.
+2. Commit local changes when there are any.
+   - Stage the relevant files. Leave out secrets (`.env`, credentials, keys) and warn if the user would have needed them.
+   - Write a 1–2 sentence message from the diff, matching recent commit style. On PowerShell use `git commit -m "message"`.
+   - If there is nothing to commit, skip the commit and continue.
+   - If a hook rejects the commit, fix the problem and make a new commit. Do not amend unless the usual amend rules apply.
+3. Sync with `origin`.
+   - `git fetch origin`
+   - `git pull --rebase origin HEAD` when the branch tracks a remote, otherwise `git pull --rebase origin main`
+   - `git push -u origin HEAD`
+4. Run `git status` and report the branch, the commit, and that the remote is in sync.
+
+Never update git config, skip hooks, or force-push. If rebase or push conflicts, stop and report the conflict instead of forcing it.

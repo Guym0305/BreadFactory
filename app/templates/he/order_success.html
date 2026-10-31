@@ -1,0 +1,32 @@
+{% extends "he/base.html" %}
+{% block title %}ההזמנה אושרה · לחם בהר{% endblock %}
+
+{% block content %}
+  <section class="shell confirm" {% if status == "PENDING_PAYMENT" %}data-poll-order="{{ order.order_number }}" data-wait-message="זה נמשך יותר מהרגיל. רעננו את העמוד בעוד רגע."{% endif %}>
+    {% if order is none %}
+      <h1>לא מצאנו את ההזמנה.</h1>
+      <p class="lede"><a href="/?lang=he">חזרה לדף הבית</a></p>
+    {% elif status == "PAID" or status == "DELIVERED" %}
+      <p class="kicker">התשלום התקבל</p>
+      <h1>נאפה את {{ order.order_number }}.</h1>
+      <p class="lede">המשלוח ב{{ order.delivery_date|delivery_label(lang) }}, בין {{ delivery_window }}, אל {{ order.customer.address }}.</p>
+      <ul class="summary">
+        {% for item in order.items %}
+          <li>
+            <span>{{ item.quantity }} × {{ item.product.name_he or item.product.name }}</span>
+            <span>{{ (item.quantity * item.unit_price)|money }}</span>
+          </li>
+        {% endfor %}
+        <li class="total">
+          <span>שולם</span>
+          <span>{{ order.total_amount|money }}</span>
+        </li>
+      </ul>
+      <p><a class="pay-button" href="/?lang=he">חזרה לדף הבית</a></p>
+    {% else %}
+      <p class="kicker">מאשרים את התשלום</p>
+      <h1>ממתינים ל-Grow.</h1>
+      <p class="lede" data-poll-note>ההזמנה {{ order.order_number }} שמורה עד שתוצאת התשלום מגיעה.</p>
+    {% endif %}
+  </section>
+{% endblock %}

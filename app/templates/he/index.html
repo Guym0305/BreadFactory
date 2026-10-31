@@ -1,0 +1,105 @@
+{% extends "he/base.html" %}
+
+{% block content %}
+  <section class="hero shell">
+    <div class="hero-layout">
+      <div>
+        <p class="kicker">הזמנת מחמצת מראש</p>
+        <h1 class="brand-display">לחם בהר</h1>
+        <p class="hero-line">הזמינו לחם <em>למשלוח ביום שישי.</em></p>
+        <p class="lede">אנחנו אופים פעם בשבוע. ההזמנות נסגרות ביום רביעי, והכיכרות יוצאות ביום שישי שאחריו. לכל משלוח יש אפייה מוגבלת.</p>
+      </div>
+      <figure class="hero-photo">
+        <img src="/static/images/hero-loaf.jpg" alt="כיכרות מחמצת של לחם בהר" width="1400" height="1050">
+      </figure>
+    </div>
+  </section>
+
+  <section class="shell choose" id="delivery" aria-labelledby="delivery-heading">
+    <h2 id="delivery-heading">{% if week == 'next' %}השבוע הבא{% else %}השבוע{% endif %}</h2>
+    {% if error %}
+      <p class="banner" role="alert">{{ error }}</p>
+    {% endif %}
+    {% if slots %}
+      {% set item = slots[0] %}
+      <div class="week-card{% if not item.available %} is-full{% endif %}">
+        <div>
+          <p class="week-label">מועד אחרון להזמנה</p>
+          <p class="week-date">{{ item.order_weekday }}</p>
+          <p>{{ item.order_day }} ב{{ item.order_month }}</p>
+        </div>
+        <div>
+          <p class="week-label">המשלוח הבא</p>
+          <p class="week-date">{{ item.weekday }}</p>
+          <p>{{ item.day }} ב{{ item.month }}</p>
+          <p class="meta">{{ item.window }} · {% if not item.available %}מלא{% elif item.remaining == 1 %}נותרה כיכר אחת{% else %}נותרו {{ item.remaining }} כיכרות{% endif %}</p>
+        </div>
+      </div>
+    {% else %}
+      <p>אין כרגע שבוע פתוח להזמנה.</p>
+    {% endif %}
+  </section>
+
+  {% if slot %}
+    <section class="shell bake" id="the-bake" aria-labelledby="bake-heading">
+      <div class="order-bar">
+        <p>{{ slot.label }} · {{ slot.window }}</p>
+        <p><span data-count>0 כיכרות</span> · <span data-total>₪0</span></p>
+      </div>
+      <h2 id="bake-heading">
+        {% if slot.remaining == 1 %}נותרה כיכר אחת למשלוח הזה.{% else %}נותרו {{ slot.remaining }} כיכרות למשלוח הזה.{% endif %}
+      </h2>
+      <form class="order-form" action="/checkout" method="post" data-remaining="{{ slot.remaining }}" data-one-loaf="כיכר אחת" data-many-loaves="{n} כיכרות" data-choose-loaf="בחרו לפחות כיכר אחת.">
+        <input type="hidden" name="lang" value="he">
+        <input type="hidden" name="delivery_date" value="{{ slot.date }}">
+        <div class="loaves">
+          {% for product in products %}
+            <article class="loaf">
+              <figure>
+                <img src="{{ product.image_url }}" alt="פנים הכיכר והקרום של {{ product.name_he }}" width="1400" height="1050" loading="lazy" decoding="async">
+              </figure>
+              <div class="loaf-copy">
+                <h3>{{ product.name_he }}</h3>
+                <p class="price">{{ product.price|money }}</p>
+                <p>{{ product.description_he }}</p>
+                <p class="meta">התפחה של {{ product.fermentation_hours }} שעות · {{ product.ingredients_he }}</p>
+                <div class="qty">
+                  <button type="button" class="step" data-dir="-1" aria-label="הסרת כיכר אחת של {{ product.name_he }}">−</button>
+                  <input class="qty-input" type="number" name="qty_{{ product.id }}" value="{{ saved.get('qty_' ~ product.id, '0') }}" min="0" max="{{ slot.remaining }}" inputmode="numeric" data-price="{{ product.price }}" aria-label="כמות של {{ product.name_he }}">
+                  <button type="button" class="step" data-dir="1" aria-label="הוספת כיכר אחת של {{ product.name_he }}">+</button>
+                </div>
+              </div>
+            </article>
+          {% endfor %}
+        </div>
+
+        <div class="details" id="details">
+          <h2>פרטי המשלוח</h2>
+          <p class="fine">פרטי הכרטיס מוזנים בעמוד התשלום של Grow. אנחנו לא רואים את מספר הכרטיס המלא.</p>
+          <label>
+            <span>שם מלא</span>
+            <input name="full_name" required maxlength="100" autocomplete="name" value="{{ saved.get('full_name', '') }}">
+          </label>
+          <label>
+            <span>טלפון</span>
+            <input name="phone" type="tel" required maxlength="20" autocomplete="tel" value="{{ saved.get('phone', '') }}">
+          </label>
+          <label>
+            <span>דוא״ל</span>
+            <input name="email" type="email" required maxlength="100" autocomplete="email" value="{{ saved.get('email', '') }}">
+          </label>
+          <label>
+            <span>כתובת למשלוח</span>
+            <textarea name="address" required maxlength="500" rows="3" autocomplete="street-address">{{ saved.get('address', '') }}</textarea>
+          </label>
+          <label>
+            <span>הערות <em>רשות</em></span>
+            <textarea name="notes" maxlength="1000" rows="2">{{ saved.get('notes', '') }}</textarea>
+          </label>
+          <p class="form-message" id="order-message" role="alert"></p>
+          <button class="pay-button" type="submit">המשיכו לתשלום</button>
+        </div>
+      </form>
+    </section>
+  {% endif %}
+{% endblock %}

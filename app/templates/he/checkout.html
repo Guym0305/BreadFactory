@@ -1,0 +1,25 @@
+{% extends "he/base.html" %}
+{% block title %}תשלום · לחם בהר{% endblock %}
+{% block body_class %}is-checkout{% endblock %}
+
+{% block content %}
+  <section class="shell checkout">
+    <p class="kicker">תשלום</p>
+    <h1>השלמת {{ order.order_number }}</h1>
+    <p class="lede">{{ order.delivery_date|delivery_label(lang) }} · {{ delivery_window }}. משלוח אל {{ order.customer.address }}.</p>
+    <ul class="summary">
+      {% for item in order.items %}
+        <li>
+          <span>{{ item.quantity }} × {{ item.product.name_he or item.product.name }}</span>
+          <span>{{ (item.quantity * item.unit_price)|money }}</span>
+        </li>
+      {% endfor %}
+      <li class="total">
+        <span>סה״כ</span>
+        <span>{{ order.total_amount|money }}</span>
+      </li>
+    </ul>
+    <iframe class="pay-frame" src="{{ order.payment_url }}" title="תשלום מאובטח"></iframe>
+    <p class="fine"><a href="{{ order.payment_url }}">פתחו את עמוד התשלום</a> אם הוא לא מופיע למעלה.</p>
+  </section>
+{% endblock %}

@@ -1,0 +1,105 @@
+{% extends "en/base.html" %}
+
+{% block content %}
+  <section class="hero shell">
+    <div class="hero-layout">
+      <div>
+        <p class="kicker">Sourdough pre-order</p>
+        <h1 class="brand-display">לחם בהר</h1>
+        <p class="hero-line">Order bread <em>for Friday delivery.</em></p>
+        <p class="lede">We bake once a week. Orders close on Wednesday, and the loaves go out the following Friday. Each delivery has a limited bake.</p>
+      </div>
+      <figure class="hero-photo">
+        <img src="/static/images/hero-loaf.jpg" alt="Rustic sourdough loaves from לחם בהר" width="1400" height="1050">
+      </figure>
+    </div>
+  </section>
+
+  <section class="shell choose" id="delivery" aria-labelledby="delivery-heading">
+    <h2 id="delivery-heading">{% if week == 'next' %}Next week{% else %}This week{% endif %}</h2>
+    {% if error %}
+      <p class="banner" role="alert">{{ error }}</p>
+    {% endif %}
+    {% if slots %}
+      {% set item = slots[0] %}
+      <div class="week-card{% if not item.available %} is-full{% endif %}">
+        <div>
+          <p class="week-label">Last ordering</p>
+          <p class="week-date">{{ item.order_weekday }}</p>
+          <p>{{ item.order_day }} {{ item.order_month }}</p>
+        </div>
+        <div>
+          <p class="week-label">Next delivery</p>
+          <p class="week-date">{{ item.weekday }}</p>
+          <p>{{ item.day }} {{ item.month }}</p>
+          <p class="meta">{{ item.window }} · {% if not item.available %}Full{% elif item.remaining == 1 %}1 loaf left{% else %}{{ item.remaining }} loaves left{% endif %}</p>
+        </div>
+      </div>
+    {% else %}
+      <p>No delivery week is open right now.</p>
+    {% endif %}
+  </section>
+
+  {% if slot %}
+    <section class="shell bake" id="the-bake" aria-labelledby="bake-heading">
+      <div class="order-bar">
+        <p>{{ slot.label }} · {{ slot.window }}</p>
+        <p><span data-count>0 loaves</span> · <span data-total>₪0</span></p>
+      </div>
+      <h2 id="bake-heading">
+        {% if slot.remaining == 1 %}1 loaf left for this delivery.{% else %}{{ slot.remaining }} loaves left for this delivery.{% endif %}
+      </h2>
+      <form class="order-form" action="/checkout" method="post" data-remaining="{{ slot.remaining }}" data-one-loaf="1 loaf" data-many-loaves="{n} loaves" data-choose-loaf="Choose at least one loaf.">
+        <input type="hidden" name="lang" value="en">
+        <input type="hidden" name="delivery_date" value="{{ slot.date }}">
+        <div class="loaves">
+          {% for product in products %}
+            <article class="loaf">
+              <figure>
+                <img src="{{ product.image_url }}" alt="Crumb and crust of {{ product.name_en }}" width="1400" height="1050" loading="lazy" decoding="async">
+              </figure>
+              <div class="loaf-copy">
+                <h3>{{ product.name_en }}</h3>
+                <p class="price">{{ product.price|money }}</p>
+                <p>{{ product.description_en }}</p>
+                <p class="meta">{{ product.fermentation_hours }}-hour ferment · {{ product.ingredients_en }}</p>
+                <div class="qty">
+                  <button type="button" class="step" data-dir="-1" aria-label="Remove one {{ product.name_en }}">−</button>
+                  <input class="qty-input" type="number" name="qty_{{ product.id }}" value="{{ saved.get('qty_' ~ product.id, '0') }}" min="0" max="{{ slot.remaining }}" inputmode="numeric" data-price="{{ product.price }}" aria-label="Quantity of {{ product.name_en }}">
+                  <button type="button" class="step" data-dir="1" aria-label="Add one {{ product.name_en }}">+</button>
+                </div>
+              </div>
+            </article>
+          {% endfor %}
+        </div>
+
+        <div class="details" id="details">
+          <h2>Your delivery</h2>
+          <p class="fine">Card details are entered on Grow’s payment page. We never see the full card number.</p>
+          <label>
+            <span>Full name</span>
+            <input name="full_name" required maxlength="100" autocomplete="name" value="{{ saved.get('full_name', '') }}">
+          </label>
+          <label>
+            <span>Phone</span>
+            <input name="phone" type="tel" required maxlength="20" autocomplete="tel" value="{{ saved.get('phone', '') }}">
+          </label>
+          <label>
+            <span>Email</span>
+            <input name="email" type="email" required maxlength="100" autocomplete="email" value="{{ saved.get('email', '') }}">
+          </label>
+          <label>
+            <span>Delivery address</span>
+            <textarea name="address" required maxlength="500" rows="3" autocomplete="street-address">{{ saved.get('address', '') }}</textarea>
+          </label>
+          <label>
+            <span>Notes <em>optional</em></span>
+            <textarea name="notes" maxlength="1000" rows="2">{{ saved.get('notes', '') }}</textarea>
+          </label>
+          <p class="form-message" id="order-message" role="alert"></p>
+          <button class="pay-button" type="submit">Proceed to payment</button>
+        </div>
+      </form>
+    </section>
+  {% endif %}
+{% endblock %}
