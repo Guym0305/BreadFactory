@@ -4,7 +4,8 @@ FROM python:3.11-slim
 # Prevent Python from writing .pyc files and buffer stdout/stderr
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
-    PORT=8080
+    PORT=8080 \
+    FORWARDED_ALLOW_IPS=*
 
 WORKDIR /app
 
@@ -25,4 +26,4 @@ COPY . .
 EXPOSE 8080
 
 # Execute Gunicorn with Uvicorn workers
-CMD exec gunicorn --bind :$PORT --workers 1 --threads 8 --timeout 0 -k uvicorn.workers.UvicornWorker app.main:app
+CMD exec gunicorn --bind :$PORT --workers 1 --threads 8 --timeout 0 --forwarded-allow-ips="*" -k uvicorn.workers.UvicornWorker app.main:app

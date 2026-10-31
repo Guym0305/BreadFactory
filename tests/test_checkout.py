@@ -116,6 +116,27 @@ def main() -> None:
         )
         expect(rejected.status_code == 403, "cross-site order was accepted")
 
+        cloud_form = {
+            "delivery_date": day,
+            "qty_" + str(product_id): "1",
+            "full_name": "",
+            "lang": "en",
+        }
+        behind_https = client.post(
+            "/checkout",
+            data=cloud_form,
+            headers={"Origin": "https://testserver", "X-Forwarded-Proto": "https"},
+        )
+        expect(behind_https.status_code == 400, "https checkout behind a proxy was rejected")
+        expect("another site" not in behind_https.text, "the public https site was treated as another site")
+        expect("Enter a name." in behind_https.text, "validation should still run after the origin check")
+        plain_https = client.post(
+            "/checkout",
+            data=cloud_form,
+            headers={"Origin": "https://testserver"},
+        )
+        expect("another site" in plain_https.text, "https origin on a direct http connection should be refused")
+
         invalid = client.post(
             "/checkout",
             data={"delivery_date": day, "qty_" + str(product_id): "1", "full_name": "", "lang": "en"},

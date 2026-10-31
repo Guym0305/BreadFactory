@@ -16,7 +16,7 @@ def create_hosted_payment(order: Order, customer: Customer) -> str:
     base = settings.public_base_url.rstrip("/")
     lang = get_lang()
     if not settings.grow_enabled:
-        return f"{base}/pay/mock/{order.order_number}?lang={lang}"
+        return f"/pay/mock/{order.order_number}?lang={lang}"
 
     payload = {
         "page_code": settings.grow_page_code,
