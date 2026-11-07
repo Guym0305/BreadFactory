@@ -1,0 +1,53 @@
+{% extends "he/base.html" %}
+{% block title %}התחברות · לחם בהר{% endblock %}
+{% block body_class %}is-login{% endblock %}
+
+{% block content %}
+  <section class="shell login">
+    <p class="kicker">חשבון</p>
+    <h1>התחברו כדי להזמין</h1>
+    <p class="lede">הירשמו עם שם משתמש וסיסמה, או המשיכו כאורח. ההזמנות נשמרות בפרופיל הלקוח שלכם.</p>
+    {% if error %}
+      <p class="banner" role="alert">{{ error }}</p>
+    {% endif %}
+
+    <div class="login-panels">
+      <form class="login-card" action="/login" method="post">
+        <input type="hidden" name="lang" value="he">
+        <input type="hidden" name="next" value="{{ next }}">
+        <h2>התחברות</h2>
+        <label>
+          <span>שם משתמש</span>
+          <input name="username" required maxlength="40" autocomplete="username" value="{{ saved_username if mode == 'login' else '' }}">
+        </label>
+        <label>
+          <span>סיסמה</span>
+          <input name="password" type="password" required maxlength="100" autocomplete="current-password">
+        </label>
+        <button class="pay-button" type="submit">התחברות</button>
+      </form>
+
+      <form class="login-card" action="/register" method="post">
+        <input type="hidden" name="lang" value="he">
+        <input type="hidden" name="next" value="{{ next }}">
+        <h2>הרשמה</h2>
+        <label>
+          <span>שם משתמש</span>
+          <input name="username" required maxlength="40" autocomplete="username" value="{{ saved_username if mode == 'register' else '' }}">
+        </label>
+        <label>
+          <span>סיסמה</span>
+          <input name="password" type="password" required minlength="6" maxlength="100" autocomplete="new-password">
+        </label>
+        <button class="pay-button" type="submit">יצירת חשבון</button>
+      </form>
+    </div>
+
+    <form class="guest-card" action="/guest" method="post">
+      <input type="hidden" name="lang" value="he">
+      <input type="hidden" name="next" value="{{ next }}">
+      <p>אין צורך בחשבון.</p>
+      <button class="guest-button" type="submit">המשיכו כאורח</button>
+    </form>
+  </section>
+{% endblock %}

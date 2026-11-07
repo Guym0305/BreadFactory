@@ -1,0 +1,17 @@
+{% extends "he/base.html" %}
+{% block title %}ניהול · לחם בהר{% endblock %}
+
+{% block content %}
+  <section class="shell confirm">
+    <p class="kicker">ניהול</p>
+    <h1>שולחן המאפייה</h1>
+    <p class="lede">מחוברים כ־{{ current_user.username }}. כאן אפשר להוסיף מסכי ניהול נוספים.</p>
+    <ul class="summary">
+      <li><span>משתמשים</span><span>{{ users_count }}</span></li>
+      <li><span>אורחים</span><span>{{ guests_count }}</span></li>
+      <li><span>מנהלים</span><span>{{ admins_count }}</span></li>
+      <li class="total"><span>הזמנות</span><span>{{ orders_count }}</span></li>
+    </ul>
+    <p><a class="pay-button" href="/?lang=he">חזרה להזמנה</a></p>
+  </section>
+{% endblock %}

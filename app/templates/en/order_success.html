@@ -2,12 +2,12 @@
 {% block title %}Order confirmed · לחם בהר{% endblock %}
 
 {% block content %}
-  <section class="shell confirm" {% if status == "PENDING_PAYMENT" %}data-poll-order="{{ order.order_number }}" data-wait-message="This is taking longer than usual. Refresh this page in a moment."{% endif %}>
+  <section class="shell confirm">
     {% if order is none %}
       <h1>We cannot find that order.</h1>
       <p class="lede"><a href="/?lang=en">Back to home</a></p>
-    {% elif status == "PAID" or status == "DELIVERED" %}
-      <p class="kicker">Payment received</p>
+    {% else %}
+      <p class="kicker">Order confirmed</p>
       <h1>We’ll bake {{ order.order_number }}.</h1>
       <p class="lede">Delivery on {{ order.delivery_date|delivery_label(lang) }}, between {{ delivery_window }}, to {{ order.customer.address }}.</p>
       <ul class="summary">
@@ -17,16 +17,16 @@
             <span>{{ (item.quantity * item.unit_price)|money }}</span>
           </li>
         {% endfor %}
+        <li>
+          <span>Charge by</span>
+          <span>{{ payment_label(order.payment_method, order.payment_other) }}</span>
+        </li>
         <li class="total">
-          <span>Paid</span>
+          <span>Total</span>
           <span>{{ order.total_amount|money }}</span>
         </li>
       </ul>
       <p><a class="pay-button" href="/?lang=en">Back to home</a></p>
-    {% else %}
-      <p class="kicker">Confirming payment</p>
-      <h1>We’re waiting for Grow.</h1>
-      <p class="lede" data-poll-note>Order {{ order.order_number }} is reserved while the payment result arrives.</p>
     {% endif %}
   </section>
 {% endblock %}

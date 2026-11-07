@@ -5,8 +5,16 @@ from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from pathlib import Path
 
-from app.i18n import get_lang, language_switch, resolve_lang, set_lang
+from app.i18n import get_lang, language_switch, resolve_lang, set_lang, t
 from app.services.slots import DELIVERY_WINDOW, MONTHS, WEEKDAYS
+
+PAYMENT_LABEL_KEYS = {
+    "bit": "pay_bit",
+    "paybox": "pay_paybox",
+    "bank_transfer": "pay_bank_transfer",
+    "cash": "pay_cash",
+    "other": "pay_other",
+}
 
 templates = Jinja2Templates(directory=str(Path(__file__).resolve().parent / "templates"))
 
@@ -17,6 +25,7 @@ def render(request: Request, name: str, context: dict, status_code: int = 200) -
     context["request"] = request
     context["lang"] = lang
     context.setdefault("week", "coming")
+    context.setdefault("current_user", None)
     context["switch_he"] = language_switch(request, "he")
     context["switch_en"] = language_switch(request, "en")
     response = HTMLResponse(templates.get_template(f"{lang}/{name}").render(context), status_code=status_code)
@@ -40,9 +49,23 @@ def delivery_label(value, lang: str = "en") -> str:
     return f"{weekday}, {value.day} {month}"
 
 
+def payment_label(method: str | None, other: str | None = None) -> str:
+    if not method:
+        return ""
+    key = PAYMENT_LABEL_KEYS.get(method)
+    if key is None:
+        return method
+    label = t(key)
+    if method == "other" and other:
+        return f"{label}: {other}"
+    return label
+
+
 templates.env.filters["money"] = money
 templates.env.filters["delivery_label"] = delivery_label
+templates.env.filters["payment_label"] = payment_label
 templates.env.globals["delivery_window"] = DELIVERY_WINDOW
+templates.env.globals["payment_label"] = payment_label
 
 
 def redirect_path(path: str, lang: str | None = None) -> str:

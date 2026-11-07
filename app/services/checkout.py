@@ -3,11 +3,10 @@ import secrets
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
-from app.models.bakery import Customer, Order, OrderItem, OrderStatus
+from app.models.bakery import Customer, Order, OrderItem, OrderStatus, User
 from app.schemas.order import CheckoutIn, OrderCreated
 from app.i18n import t
 from app.services.errors import CheckoutError
-from app.services.grow import create_hosted_payment
 from app.services.orders import serialize_order
 from app.services.slots import delivery_datetime, require_slot
 
@@ -46,13 +45,15 @@ def checkout_from_form(form) -> CheckoutIn:
             "email": form.get("email", ""),
             "address": form.get("address", ""),
             "notes": form.get("notes", ""),
+            "payment_method": form.get("payment_method", ""),
+            "payment_other": form.get("payment_other", ""),
             "delivery_date": form.get("delivery_date", ""),
             "lines": lines,
         }
     )
 
 
-def create_checkout(db: Session, data: CheckoutIn) -> Order:
+def create_checkout(db: Session, data: CheckoutIn, user: User | None = None) -> Order:
     slot = require_slot(db, data.delivery_date)
     chosen = _priced_lines(db, data)
     requested = sum(quantity for _, quantity in chosen)
@@ -61,29 +62,41 @@ def create_checkout(db: Session, data: CheckoutIn) -> Order:
             raise CheckoutError(t("one_left"))
         raise CheckoutError(t("n_left", n=slot.remaining))
 
-    customer = db.query(Customer).filter(Customer.phone == data.phone).one_or_none()
-    if customer is None:
-        customer = Customer(
-            full_name=data.full_name,
-            phone=data.phone,
-            email=data.email,
-            address=data.address,
-        )
-        db.add(customer)
-        db.flush()
-    else:
+    if user is not None:
+        customer = db.query(Customer).filter(Customer.id == user.customer_id).one_or_none()
+        if customer is None:
+            raise CheckoutError(t("login_required"), 401)
         customer.full_name = data.full_name
+        customer.phone = data.phone
         customer.email = data.email
         customer.address = data.address
+    else:
+        customer = db.query(Customer).filter(Customer.phone == data.phone).one_or_none()
+        if customer is None:
+            customer = Customer(
+                full_name=data.full_name,
+                phone=data.phone,
+                email=data.email,
+                address=data.address,
+            )
+            db.add(customer)
+            db.flush()
+        else:
+            customer.full_name = data.full_name
+            customer.email = data.email
+            customer.address = data.address
 
     total = round(sum(product.price * quantity for product, quantity in chosen), 2)
     order = Order(
         customer_id=customer.id,
         order_number=_order_number(db, data.delivery_date),
-        status=OrderStatus.PENDING_PAYMENT,
+        status=OrderStatus.PAID,
         delivery_date=delivery_datetime(data.delivery_date),
         total_amount=total,
         notes=data.notes,
+        payment_method=data.payment_method,
+        payment_other=data.payment_other,
+        payment_url=None,
     )
     db.add(order)
     db.flush()
@@ -99,23 +112,12 @@ def create_checkout(db: Session, data: CheckoutIn) -> Order:
     db.commit()
     db.refresh(order)
     db.refresh(customer)
-
-    try:
-        payment_url = create_hosted_payment(order, customer)
-    except CheckoutError:
-        order.status = OrderStatus.CANCELLED
-        db.commit()
-        raise
-
-    order.payment_url = payment_url
-    db.commit()
-    db.refresh(order)
     return order
 
 
 def created_payload(order: Order) -> OrderCreated:
     body = serialize_order(order).model_dump()
-    body["payment_url"] = order.payment_url or ""
+    body["payment_url"] = ""
     return OrderCreated.model_validate(body)
 
 

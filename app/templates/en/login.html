@@ -1,0 +1,53 @@
+{% extends "en/base.html" %}
+{% block title %}Sign in · לחם בהר{% endblock %}
+{% block body_class %}is-login{% endblock %}
+
+{% block content %}
+  <section class="shell login">
+    <p class="kicker">Account</p>
+    <h1>Sign in to order</h1>
+    <p class="lede">Register with a username and password, or continue as guest. Orders are saved to your customer profile.</p>
+    {% if error %}
+      <p class="banner" role="alert">{{ error }}</p>
+    {% endif %}
+
+    <div class="login-panels">
+      <form class="login-card" action="/login" method="post">
+        <input type="hidden" name="lang" value="en">
+        <input type="hidden" name="next" value="{{ next }}">
+        <h2>Sign in</h2>
+        <label>
+          <span>Username</span>
+          <input name="username" required maxlength="40" autocomplete="username" value="{{ saved_username if mode == 'login' else '' }}">
+        </label>
+        <label>
+          <span>Password</span>
+          <input name="password" type="password" required maxlength="100" autocomplete="current-password">
+        </label>
+        <button class="pay-button" type="submit">Sign in</button>
+      </form>
+
+      <form class="login-card" action="/register" method="post">
+        <input type="hidden" name="lang" value="en">
+        <input type="hidden" name="next" value="{{ next }}">
+        <h2>Register</h2>
+        <label>
+          <span>Username</span>
+          <input name="username" required maxlength="40" autocomplete="username" value="{{ saved_username if mode == 'register' else '' }}">
+        </label>
+        <label>
+          <span>Password</span>
+          <input name="password" type="password" required minlength="6" maxlength="100" autocomplete="new-password">
+        </label>
+        <button class="pay-button" type="submit">Create account</button>
+      </form>
+    </div>
+
+    <form class="guest-card" action="/guest" method="post">
+      <input type="hidden" name="lang" value="en">
+      <input type="hidden" name="next" value="{{ next }}">
+      <p>No account needed.</p>
+      <button class="guest-button" type="submit">Continue as Guest</button>
+    </form>
+  </section>
+{% endblock %}

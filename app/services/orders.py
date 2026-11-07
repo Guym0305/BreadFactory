@@ -30,6 +30,8 @@ def serialize_order(order: Order) -> OrderStatusOut:
         status=status,
         delivery_date=order.delivery_date,
         total_amount=order.total_amount,
+        payment_method=order.payment_method,
+        payment_other=order.payment_other,
         lines=[
             OrderLineOut(
                 product_name=_product_name(item.product),

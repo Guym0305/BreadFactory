@@ -49,7 +49,7 @@
       <h2 id="bake-heading">
         {% if slot.remaining == 1 %}נותרה כיכר אחת למשלוח הזה.{% else %}נותרו {{ slot.remaining }} כיכרות למשלוח הזה.{% endif %}
       </h2>
-      <form class="order-form" action="/checkout" method="post" data-remaining="{{ slot.remaining }}" data-one-loaf="כיכר אחת" data-many-loaves="{n} כיכרות" data-choose-loaf="בחרו לפחות כיכר אחת.">
+      <form class="order-form" action="/checkout" method="post" data-remaining="{{ slot.remaining }}" data-one-loaf="כיכר אחת" data-many-loaves="{n} כיכרות" data-choose-loaf="בחרו לפחות כיכר אחת." data-choose-payment="בחרו איך תשלמו." data-enter-payment-other="הזינו איך תשלמו.">
         <input type="hidden" name="lang" value="he">
         <input type="hidden" name="delivery_date" value="{{ slot.date }}">
         <div class="loaves">
@@ -75,7 +75,6 @@
 
         <div class="details" id="details">
           <h2>פרטי המשלוח</h2>
-          <p class="fine">פרטי הכרטיס מוזנים בעמוד התשלום של Grow. אנחנו לא רואים את מספר הכרטיס המלא.</p>
           <label>
             <span>שם מלא</span>
             <input name="full_name" required maxlength="100" autocomplete="name" value="{{ saved.get('full_name', '') }}">
@@ -92,12 +91,56 @@
             <span>כתובת למשלוח</span>
             <textarea name="address" required maxlength="500" rows="3" autocomplete="street-address">{{ saved.get('address', '') }}</textarea>
           </label>
+          <fieldset class="pay-methods">
+            <legend>איך לחייב</legend>
+            <div class="pay-method-grid" role="radiogroup" aria-label="איך לחייב">
+              <label class="pay-method">
+                <input type="radio" name="payment_method" value="bit" {% if saved.get('payment_method') == 'bit' %}checked{% endif %}>
+                <span class="pay-method-face">
+                  <img src="/static/images/payment/bit.svg" alt="" width="40" height="40">
+                  <span>Bit</span>
+                </span>
+              </label>
+              <label class="pay-method">
+                <input type="radio" name="payment_method" value="paybox" {% if saved.get('payment_method') == 'paybox' %}checked{% endif %}>
+                <span class="pay-method-face">
+                  <img src="/static/images/payment/paybox.svg" alt="" width="40" height="40">
+                  <span>PayBox</span>
+                </span>
+              </label>
+              <label class="pay-method">
+                <input type="radio" name="payment_method" value="bank_transfer" {% if saved.get('payment_method') == 'bank_transfer' %}checked{% endif %}>
+                <span class="pay-method-face">
+                  <img src="/static/images/payment/bank.svg" alt="" width="40" height="40">
+                  <span>העברה בנקאית</span>
+                </span>
+              </label>
+              <label class="pay-method">
+                <input type="radio" name="payment_method" value="cash" {% if saved.get('payment_method') == 'cash' %}checked{% endif %}>
+                <span class="pay-method-face">
+                  <img src="/static/images/payment/cash.svg" alt="" width="40" height="40">
+                  <span>מזומן</span>
+                </span>
+              </label>
+              <label class="pay-method">
+                <input type="radio" name="payment_method" value="other" {% if saved.get('payment_method') == 'other' %}checked{% endif %}>
+                <span class="pay-method-face">
+                  <span class="pay-method-other-icon" aria-hidden="true">…</span>
+                  <span>אחר</span>
+                </span>
+              </label>
+            </div>
+            <label class="pay-other{% if saved.get('payment_method') != 'other' %} is-hidden{% endif %}" data-pay-other>
+              <span>תשלום אחר</span>
+              <input name="payment_other" maxlength="120" autocomplete="off" value="{{ saved.get('payment_other', '') }}" placeholder="שורה קצרה אחת">
+            </label>
+          </fieldset>
           <label>
             <span>הערות <em>רשות</em></span>
             <textarea name="notes" maxlength="1000" rows="2">{{ saved.get('notes', '') }}</textarea>
           </label>
           <p class="form-message" id="order-message" role="alert"></p>
-          <button class="pay-button" type="submit">המשיכו לתשלום</button>
+          <button class="pay-button" type="submit">שליחת הזמנה</button>
         </div>
       </form>
     </section>

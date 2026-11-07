@@ -52,6 +52,22 @@ class Customer(Base):
     created_at = Column(DateTime, default=utcnow)
 
     orders = relationship("Order", back_populates="customer")
+    user = relationship("User", back_populates="customer", uselist=False)
+
+
+class User(Base):
+    __tablename__ = "users"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    username = Column(String(40), unique=True, nullable=False, index=True)
+    password_hash = Column(String(255), nullable=True)
+    is_guest = Column(Boolean, default=False, nullable=False)
+    is_admin = Column(Boolean, default=False, nullable=False)
+    customer_id = Column(Integer, ForeignKey("customers.id"), nullable=False, unique=True, index=True)
+    created_at = Column(DateTime, default=utcnow)
+
+    customer = relationship("Customer", back_populates="user")
+
 
 
 class Order(Base):
@@ -68,6 +84,8 @@ class Order(Base):
     delivery_date = Column(DateTime, nullable=False, index=True)
     total_amount = Column(Float, nullable=False)
     notes = Column(Text, nullable=True)
+    payment_method = Column(String(32), nullable=True)
+    payment_other = Column(String(120), nullable=True)
     payment_url = Column(String(512), nullable=True)
     created_at = Column(DateTime, default=utcnow)
 

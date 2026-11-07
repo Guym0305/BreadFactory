@@ -1,6 +1,7 @@
 from sqlalchemy.orm import Session
 
 from app.models.bakery import Product
+from app.services.auth import ensure_admin_user
 
 SEED_PRODUCTS = [
     {
@@ -78,3 +79,4 @@ def seed_products(db: Session) -> None:
         if not current.image_url or current.image_url in PLACEHOLDER_IMAGES:
             current.image_url = record["image_url"]
     db.commit()
+    ensure_admin_user(db)

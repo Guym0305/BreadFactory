@@ -133,7 +133,10 @@ html[lang="he"] {
 
 html[lang="he"] .header-note,
 html[lang="he"] .kicker,
-html[lang="he"] label span {
+html[lang="he"] label span,
+html[lang="he"] .account-chip,
+html[lang="he"] .logout-form button,
+html[lang="he"] .pay-methods legend {
   letter-spacing: 0;
   text-transform: none;
 }
@@ -160,11 +163,35 @@ html[lang="he"] label span {
 .kicker,
 .meta,
 .fine,
-label span {
+label span,
+.account-chip,
+.logout-form button {
   letter-spacing: 0.14em;
   text-transform: uppercase;
   font-size: 0.72rem;
   font-weight: 500;
+}
+
+.account-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  color: var(--color-olive);
+}
+
+.logout-form {
+  margin: 0;
+}
+
+.logout-form button {
+  -webkit-appearance: none;
+  appearance: none;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  min-height: 44px;
+  cursor: pointer;
+  color: inherit;
 }
 
 .header-note,
@@ -477,6 +504,95 @@ html[lang="he"] .week-label {
   padding-top: 1rem;
 }
 
+.pay-methods {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  display: grid;
+  gap: 0.85rem;
+}
+
+.pay-methods legend {
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  font-size: 0.72rem;
+  font-weight: 500;
+  margin-bottom: 0.35rem;
+}
+
+html[lang="he"] .pay-methods legend {
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.pay-method-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.65rem;
+}
+
+.pay-method {
+  margin: 0;
+  cursor: pointer;
+}
+
+.pay-method input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+  width: 1px;
+  height: 1px;
+}
+
+.pay-method-face {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  min-height: 3.4rem;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--color-clay);
+  background: transparent;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.pay-method-face img,
+.pay-method-other-icon {
+  width: 2.5rem;
+  height: 2.5rem;
+  flex: 0 0 auto;
+}
+
+.pay-method-other-icon {
+  display: grid;
+  place-items: center;
+  border-radius: 0.65rem;
+  background: var(--color-olive);
+  color: var(--color-parchment);
+  font-size: 1.35rem;
+  line-height: 1;
+}
+
+.pay-method-face span:last-child {
+  letter-spacing: 0;
+  text-transform: none;
+  font-size: 0.95rem;
+  font-weight: 500;
+}
+
+.pay-method input:checked + .pay-method-face {
+  border-color: var(--color-olive);
+  background: rgba(62, 74, 52, 0.08);
+}
+
+.pay-method input:focus-visible + .pay-method-face {
+  outline: 2px solid var(--color-gold);
+  outline-offset: 3px;
+}
+
+.pay-other.is-hidden {
+  display: none;
+}
+
 label span em {
   font-style: normal;
   text-transform: none;
@@ -533,17 +649,72 @@ a:focus-visible {
 
 .checkout,
 .confirm,
-.mock-pay {
+.mock-pay,
+.login {
   padding-top: 3.5rem;
   padding-bottom: 4rem;
 }
 
 .checkout h1,
 .confirm h1,
-.mock-pay h1 {
+.mock-pay h1,
+.login h1 {
   margin: 0.2rem 0 1rem;
   font-size: clamp(2.4rem, 6vw, 4.4rem);
   line-height: 1;
+}
+
+.login-panels {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+  margin: 1.75rem 0 1.25rem;
+}
+
+.login-card,
+.guest-card {
+  display: grid;
+  gap: 0.85rem;
+  padding: 1.1rem 1rem 1.2rem;
+  border: 1px solid var(--color-clay);
+}
+
+.login-card h2 {
+  margin: 0;
+  font-family: var(--font-serif);
+  font-size: 1.45rem;
+  font-weight: 500;
+}
+
+.guest-card {
+  align-items: start;
+}
+
+.guest-card p {
+  margin: 0;
+}
+
+.guest-button {
+  -webkit-appearance: none;
+  appearance: none;
+  border: 1px solid var(--color-olive);
+  background: transparent;
+  color: var(--color-olive);
+  min-height: 48px;
+  padding: 0.85rem 1.2rem;
+  cursor: pointer;
+  width: 100%;
+  max-width: 22rem;
+}
+
+.guest-button:hover {
+  background: rgba(62, 74, 52, 0.08);
+}
+
+@media (max-width: 720px) {
+  .login-panels {
+    grid-template-columns: 1fr;
+  }
 }
 
 .summary {

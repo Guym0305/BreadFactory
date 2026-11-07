@@ -4,9 +4,10 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.i18n import resolve_lang
+from app.i18n import resolve_lang, t
 from app.schemas.order import OrderCreated, OrderStatusOut
 from app.security import assert_same_origin
+from app.services.auth import current_user
 from app.services.checkout import create_checkout, created_payload, parse_checkout
 from app.services.errors import CheckoutError
 from app.services.orders import get_order, serialize_order
@@ -19,8 +20,11 @@ async def create_order(request: Request, db: Session = Depends(get_db)):
     resolve_lang(request)
     try:
         assert_same_origin(request)
+        user = current_user(request, db)
+        if user is None:
+            raise CheckoutError(t("login_required"), 401)
         payload = await request.json()
-        order = create_checkout(db, parse_checkout(payload))
+        order = create_checkout(db, parse_checkout(payload), user=user)
     except CheckoutError as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.message) from exc
     except json.JSONDecodeError as exc:

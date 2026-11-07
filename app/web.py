@@ -1,4 +1,5 @@
 from datetime import date
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import RedirectResponse
@@ -7,8 +8,17 @@ from sqlalchemy.orm import Session
 from app.config import get_settings
 from app.database import get_db
 from app.i18n import get_lang, resolve_lang, set_lang, t
-from app.models.bakery import OrderStatus, Product
+from app.models.bakery import Order, OrderStatus, Product, User
 from app.security import assert_same_origin
+from app.services.auth import (
+    authenticate_user,
+    clear_session,
+    create_guest_user,
+    current_user,
+    customer_form_defaults,
+    register_user,
+    set_session_user,
+)
 from app.services.checkout import checkout_from_form, create_checkout
 from app.services.errors import CheckoutError
 from app.services.orders import get_order
@@ -35,7 +45,17 @@ def _parse_date(raw: str | None) -> date | None:
 
 def _saved_form(form) -> dict[str, str]:
     saved: dict[str, str] = {}
-    for key in ("full_name", "phone", "email", "address", "notes", "delivery_date", "lang"):
+    for key in (
+        "full_name",
+        "phone",
+        "email",
+        "address",
+        "notes",
+        "payment_method",
+        "payment_other",
+        "delivery_date",
+        "lang",
+    ):
         value = form.get(key)
         if value is not None:
             saved[key] = str(value)
@@ -51,6 +71,21 @@ def _use_lang(request: Request, posted: str | None = None) -> str:
     return resolve_lang(request)
 
 
+def _next_path(raw: str | None) -> str:
+    if not raw:
+        return "/"
+    path = raw.strip()
+    if not path.startswith("/") or path.startswith("//"):
+        return "/"
+    return path
+
+
+def _login_redirect(request: Request, next_path: str = "/") -> RedirectResponse:
+    lang = get_lang()
+    target = quote(_next_path(next_path), safe="/?&=%")
+    return RedirectResponse(redirect_path(f"/login?next={target}", lang), status_code=303)
+
+
 def _render_home(
     request: Request,
     db: Session,
@@ -60,6 +95,7 @@ def _render_home(
     saved: dict | None = None,
     status_code: int = 200,
     week: str = "coming",
+    user=None,
 ):
     lang = get_lang()
     if week != "next":
@@ -74,16 +110,160 @@ def _render_home(
     products = []
     if show_bake:
         products = db.query(Product).filter(Product.is_active.is_(True)).order_by(Product.id).all()
+    form_saved = dict(saved or {})
+    if user is not None and user.customer is not None:
+        for key, value in customer_form_defaults(user.customer).items():
+            form_saved.setdefault(key, value)
     context = {
         "slots": slots,
         "products": products,
         "slot": slot if show_bake else None,
         "error": error,
-        "saved": saved or {},
+        "saved": form_saved,
         "lang": lang,
         "week": week,
+        "current_user": user,
     }
     return render(request, "index.html", context, status_code=status_code)
+
+
+@router.get("/login")
+def login_page(
+    request: Request,
+    next: str = "/",
+    db: Session = Depends(get_db),
+):
+    resolve_lang(request)
+    user = current_user(request, db)
+    if user is not None:
+        return RedirectResponse(redirect_path(_next_path(next)), status_code=302)
+    return render(
+        request,
+        "login.html",
+        {
+            "next": _next_path(next),
+            "error": None,
+            "mode": "login",
+            "saved_username": "",
+            "current_user": None,
+        },
+    )
+
+
+@router.post("/login")
+async def login_submit(request: Request, db: Session = Depends(get_db)):
+    form = await request.form()
+    _use_lang(request, str(form.get("lang")) if form.get("lang") else None)
+    next_path = _next_path(str(form.get("next") or "/"))
+    username = str(form.get("username") or "")
+    password = str(form.get("password") or "")
+    try:
+        assert_same_origin(request)
+        user = authenticate_user(db, username, password)
+    except CheckoutError as exc:
+        return render(
+            request,
+            "login.html",
+            {
+                "next": next_path,
+                "error": exc.message,
+                "mode": "login",
+                "saved_username": username.strip(),
+                "current_user": None,
+            },
+            status_code=exc.status_code,
+        )
+    response = RedirectResponse(redirect_path(next_path), status_code=303)
+    set_session_user(response, user.id)
+    return response
+
+
+@router.post("/register")
+async def register_submit(request: Request, db: Session = Depends(get_db)):
+    form = await request.form()
+    _use_lang(request, str(form.get("lang")) if form.get("lang") else None)
+    next_path = _next_path(str(form.get("next") or "/"))
+    username = str(form.get("username") or "")
+    password = str(form.get("password") or "")
+    try:
+        assert_same_origin(request)
+        user = register_user(db, username, password)
+    except CheckoutError as exc:
+        return render(
+            request,
+            "login.html",
+            {
+                "next": next_path,
+                "error": exc.message,
+                "mode": "register",
+                "saved_username": username.strip(),
+                "current_user": None,
+            },
+            status_code=exc.status_code,
+        )
+    response = RedirectResponse(redirect_path(next_path), status_code=303)
+    set_session_user(response, user.id)
+    return response
+
+
+@router.post("/guest")
+async def guest_submit(request: Request, db: Session = Depends(get_db)):
+    form = await request.form()
+    _use_lang(request, str(form.get("lang")) if form.get("lang") else None)
+    next_path = _next_path(str(form.get("next") or "/"))
+    try:
+        assert_same_origin(request)
+        user = create_guest_user(db)
+    except CheckoutError as exc:
+        return render(
+            request,
+            "login.html",
+            {
+                "next": next_path,
+                "error": exc.message,
+                "mode": "login",
+                "saved_username": "",
+                "current_user": None,
+            },
+            status_code=exc.status_code,
+        )
+    response = RedirectResponse(redirect_path(next_path), status_code=303)
+    set_session_user(response, user.id)
+    return response
+
+
+@router.post("/logout")
+async def logout_submit(request: Request, db: Session = Depends(get_db)):
+    form = await request.form()
+    _use_lang(request, str(form.get("lang")) if form.get("lang") else None)
+    try:
+        assert_same_origin(request)
+    except CheckoutError:
+        pass
+    response = RedirectResponse(redirect_path("/login"), status_code=303)
+    clear_session(response)
+    return response
+
+
+@router.get("/admin")
+def admin_page(request: Request, db: Session = Depends(get_db)):
+    resolve_lang(request)
+    user = current_user(request, db)
+    if user is None:
+        return _login_redirect(request, "/admin")
+    if not user.is_admin:
+        raise HTTPException(status_code=403, detail=t("admin_only"))
+    return render(
+        request,
+        "admin.html",
+        {
+            "current_user": user,
+            "users_count": db.query(User).count(),
+            "orders_count": db.query(Order).count(),
+            "guests_count": db.query(User).filter(User.is_guest.is_(True)).count(),
+            "admins_count": db.query(User).filter(User.is_admin.is_(True)).count(),
+        },
+    )
 
 
 @router.get("/")
@@ -93,12 +273,18 @@ def home(
     db: Session = Depends(get_db),
 ):
     resolve_lang(request)
+    user = current_user(request, db)
+    if user is None:
+        next_path = request.url.path
+        if request.url.query:
+            next_path = f"{next_path}?{request.url.query}"
+        return _login_redirect(request, next_path)
     selected = _parse_date(delivery_date)
     week = "next" if request.query_params.get("week") == "next" else "coming"
     error = None
     if delivery_date and selected is None:
         error = t("choose_morning")
-    return _render_home(request, db, selected=selected, error=error, week=week)
+    return _render_home(request, db, selected=selected, error=error, week=week, user=user)
 
 
 @router.post("/checkout")
@@ -106,9 +292,12 @@ async def start_checkout(request: Request, db: Session = Depends(get_db)):
     form = await request.form()
     saved = _saved_form(form)
     _use_lang(request, saved.get("lang"))
+    user = current_user(request, db)
+    if user is None:
+        return _login_redirect(request, "/")
     try:
         assert_same_origin(request)
-        order = create_checkout(db, checkout_from_form(form))
+        order = create_checkout(db, checkout_from_form(form), user=user)
     except CheckoutError as exc:
         return _render_home(
             request,
@@ -118,13 +307,15 @@ async def start_checkout(request: Request, db: Session = Depends(get_db)):
             saved=saved,
             status_code=exc.status_code,
             week=week_choice_for(_parse_date(saved.get("delivery_date"))),
+            user=user,
         )
-    return RedirectResponse(redirect_path(f"/checkout/{order.order_number}"), status_code=303)
+    return RedirectResponse(redirect_path(f"/order-success?order_id={order.order_number}"), status_code=303)
 
 
 @router.get("/checkout/{order_number}")
 def checkout_page(request: Request, order_number: str, db: Session = Depends(get_db)):
     resolve_lang(request)
+    user = current_user(request, db)
     order = get_order(db, order_number)
     if order is None:
         raise HTTPException(status_code=404, detail=t("order_not_found"))
@@ -135,25 +326,27 @@ def checkout_page(request: Request, order_number: str, db: Session = Depends(get
         return RedirectResponse(redirect_path(f"/order-failed?order_id={order.order_number}"), status_code=302)
     if not order.payment_url:
         raise HTTPException(status_code=502, detail=t("payment_start"))
-    return render(request, "checkout.html", {"order": order, "status": status})
+    return render(request, "checkout.html", {"order": order, "status": status, "current_user": user})
 
 
 @router.get("/order-success")
 def order_success(request: Request, order_id: str = "", db: Session = Depends(get_db)):
     resolve_lang(request)
+    user = current_user(request, db)
     order = get_order(db, order_id) if order_id else None
     if order is not None and _status_value(order) == OrderStatus.CANCELLED.value:
         return RedirectResponse(redirect_path(f"/order-failed?order_id={order.order_number}"), status_code=302)
     status = _status_value(order) if order is not None else ""
-    return render(request, "order_success.html", {"order": order, "status": status})
+    return render(request, "order_success.html", {"order": order, "status": status, "current_user": user})
 
 
 @router.get("/order-failed")
 def order_failed(request: Request, order_id: str = "", db: Session = Depends(get_db)):
     resolve_lang(request)
+    user = current_user(request, db)
     order = get_order(db, order_id) if order_id else None
     status = _status_value(order) if order is not None else ""
-    return render(request, "order_failed.html", {"order": order, "status": status})
+    return render(request, "order_failed.html", {"order": order, "status": status, "current_user": user})
 
 
 @router.get("/pay/mock/{order_number}")
@@ -161,6 +354,7 @@ def mock_payment(request: Request, order_number: str, db: Session = Depends(get_
     resolve_lang(request)
     if get_settings().grow_enabled:
         raise HTTPException(status_code=404, detail="Not found.")
+    user = current_user(request, db)
     order = get_order(db, order_number)
     if order is None:
         raise HTTPException(status_code=404, detail=t("order_not_found"))
@@ -169,7 +363,7 @@ def mock_payment(request: Request, order_number: str, db: Session = Depends(get_
         return RedirectResponse(redirect_path(f"/order-success?order_id={order.order_number}"), status_code=302)
     if status == OrderStatus.CANCELLED.value:
         return RedirectResponse(redirect_path(f"/order-failed?order_id={order.order_number}"), status_code=302)
-    return render(request, "mock_payment.html", {"order": order})
+    return render(request, "mock_payment.html", {"order": order, "current_user": user})
 
 
 @router.post("/pay/mock/{order_number}/complete")

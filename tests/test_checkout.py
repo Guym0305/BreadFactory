@@ -20,12 +20,15 @@ os.environ["SLOT_CAPACITY"] = "2"
 os.environ["GROW_API_KEY"] = ""
 os.environ["GROW_WEBHOOK_SECRET"] = ""
 os.environ["PUBLIC_BASE_URL"] = "http://127.0.0.1:8000"
+os.environ["SESSION_SECRET"] = "test-session-secret"
+os.environ["ADMIN_USERNAME"] = "Admin"
+os.environ["ADMIN_PASSWORD"] = "Admin"
 
 from fastapi.testclient import TestClient
 
 from app.database import SessionLocal
 from app.main import app
-from app.models.bakery import Order, PaymentTransaction, utcnow
+from app.models.bakery import Order, User
 from app.services.errors import CheckoutError
 from app.services.payments import mask_card, verify_webhook_signature
 
@@ -35,16 +38,25 @@ def expect(condition: bool, message: str) -> None:
         raise SystemExit(message)
 
 
-def customer(phone: str, day: str, product_id: int, quantity: int) -> dict:
-    return {
+def customer(phone: str, day: str, product_id: int, quantity: int, method: str = "bit") -> dict:
+    payload = {
         "full_name": "Noa Levi",
         "phone": phone,
         "email": "noa@example.com",
         "address": "12 Herzl Street, Tel Aviv",
         "notes": "",
+        "payment_method": method,
         "delivery_date": day,
         "lines": [{"product_id": product_id, "quantity": quantity}],
     }
+    if method == "other":
+        payload["payment_other"] = "Check on delivery"
+    return payload
+
+
+def become_guest(client: TestClient) -> None:
+    response = client.post("/guest", data={"lang": "en", "next": "/"}, follow_redirects=False)
+    expect(response.status_code == 303, f"guest login failed: {response.status_code}")
 
 
 def main() -> None:
@@ -59,6 +71,16 @@ def main() -> None:
     expect(mask_card("4580123412341234") == "****1234", "full card numbers must be masked")
 
     with TestClient(app) as client:
+        locked = client.get("/?lang=en", follow_redirects=False)
+        expect(locked.status_code == 303, "home should require login")
+        expect("/login" in locked.headers["location"], locked.headers["location"])
+
+        login_page = client.get("/login?lang=en")
+        expect(login_page.status_code == 200, "login page missing")
+        expect("Continue as Guest" in login_page.text, "guest option missing")
+        expect("Create account" in login_page.text, "register form missing")
+
+        become_guest(client)
         home = client.get("/?lang=en")
         expect(home.status_code == 200, f"home status {home.status_code}")
         expect("Last ordering" in home.text, "home is missing the Wednesday deadline")
@@ -69,6 +91,8 @@ def main() -> None:
         expect("country-loaf.jpg" in home.text, "product photos were not switched on")
         expect("Playfair+Display" in home.text, "serif face is not loaded")
         expect('lang="en"' in home.text, "english page is missing its language")
+        expect("Guest" in home.text, "guest account chip missing")
+        expect("Payment by Grow" not in home.text, "Grow payment copy should be gone")
 
         hebrew_home = client.get("/?lang=he")
         expect("מועד אחרון להזמנה" in hebrew_home.text, "hebrew home is missing the order deadline")
@@ -79,6 +103,8 @@ def main() -> None:
 
         css = client.get("/static/css/style.css")
         expect("#fdfbf7" in css.text, "parchment background is missing")
+        expect(".pay-method-grid" in css.text, "payment method styles are missing")
+        expect(".login-panels" in css.text, "login styles are missing")
 
         slots = client.get("/api/v1/slots?lang=en").json()
         products = client.get("/api/v1/products").json()
@@ -104,22 +130,29 @@ def main() -> None:
 
         chosen = client.get(f"/?date={day}&lang=en")
         expect("Country Sourdough" in chosen.text, "gallery did not open for the coming Friday")
-        expect("Proceed to payment" in chosen.text, "checkout form is missing")
+        expect("Place order" in chosen.text, "order form is missing")
+        expect("How to charge" in chosen.text, "payment method picker is missing")
+        expect("/static/images/payment/bit.svg" in chosen.text, "Bit icon is missing")
+        expect("/static/images/payment/paybox.svg" in chosen.text, "PayBox icon is missing")
         hebrew_bake = client.get(f"/?date={day}&lang=he")
         expect("לחם מחמצת כפרי" in hebrew_bake.text, "hebrew product title is missing")
         expect("כיכר גרעינים" in hebrew_bake.text, "hebrew seeded loaf title is missing")
+        expect("איך לחייב" in hebrew_bake.text, "hebrew payment picker is missing")
 
+        client.post("/logout", data={"lang": "en"}, follow_redirects=False)
         rejected = client.post(
             "/api/v1/orders",
             json=customer("0501234567", day, product_id, 1),
             headers={"Origin": "https://evil.example"},
         )
-        expect(rejected.status_code == 403, "cross-site order was accepted")
+        expect(rejected.status_code in (401, 403), "cross-site or anonymous order was accepted")
 
+        become_guest(client)
         cloud_form = {
             "delivery_date": day,
             "qty_" + str(product_id): "1",
             "full_name": "",
+            "payment_method": "cash",
             "lang": "en",
         }
         behind_https = client.post(
@@ -139,91 +172,93 @@ def main() -> None:
 
         invalid = client.post(
             "/checkout",
-            data={"delivery_date": day, "qty_" + str(product_id): "1", "full_name": "", "lang": "en"},
+            data={
+                "delivery_date": day,
+                "qty_" + str(product_id): "1",
+                "full_name": "",
+                "payment_method": "cash",
+                "lang": "en",
+            },
         )
         expect(invalid.status_code == 400, "blank name was accepted")
         expect("Enter a name." in invalid.text, "validation message missing")
 
-        created = client.post("/api/v1/orders", json=customer("0501111111", day, product_id, 1))
+        client.post("/logout", data={"lang": "en"}, follow_redirects=False)
+        missing_auth = client.post("/api/v1/orders", json=customer("0505555555", day, product_id, 1))
+        expect(missing_auth.status_code == 401, "anonymous API order was accepted")
+
+        become_guest(client)
+        created = client.post("/api/v1/orders", json=customer("0501111111", day, product_id, 1, "paybox"))
         expect(created.status_code == 200, created.text)
-        order_number = created.json()["order_number"]
+        body = created.json()
+        order_number = body["order_number"]
         expect(order_number.startswith("BAKE-"), order_number)
-
-        checkout = client.get(f"/checkout/{order_number}?lang=en")
-        expect(checkout.status_code == 200, "checkout page missing")
-        expect("<iframe" in checkout.text, "payment iframe missing")
-        expect(f"/pay/mock/{order_number}" in checkout.text, "development payment URL missing")
-
-        mismatch = client.post(
-            "/api/v1/payments/webhook",
-            data={
-                "order_id": order_number,
-                "transaction_id": "TX-WRONG",
-                "status": "SUCCESS",
-                "sum": "1.00",
-                "card_mask": "4580123412349999",
-            },
-        )
-        expect(mismatch.status_code == 400, "mismatched amount was accepted")
-        still_pending = client.get(f"/api/v1/orders/{order_number}").json()
-        expect(still_pending["status"] == "PENDING_PAYMENT", still_pending["status"])
-
-        paid = client.post(
-            "/api/v1/payments/webhook",
-            data={
-                "order_id": order_number,
-                "transaction_id": "TX-1",
-                "status": "SUCCESS",
-                "sum": str(created.json()["total_amount"]),
-                "card_mask": "4580123412349999",
-            },
-        )
-        expect(paid.status_code == 200, paid.text)
-        expect(paid.json()["status"] == "ok", paid.text)
-        duplicate = client.post(
-            "/api/v1/payments/webhook",
-            data={
-                "order_id": order_number,
-                "transaction_id": "TX-1",
-                "status": "SUCCESS",
-                "sum": str(created.json()["total_amount"]),
-            },
-        )
-        expect(duplicate.json()["status"] == "already_processed", duplicate.text)
-
-        success = client.get(f"/order-success?order_id={order_number}&lang=en")
-        expect("Payment received" in success.text, "confirmation copy missing")
+        expect(body["status"] == "PAID", body["status"])
+        expect(body["payment_method"] == "paybox", body["payment_method"])
+        expect(body.get("payment_url", "") == "", "hosted payment URL should not be created")
 
         db = SessionLocal()
         try:
-            stored = db.query(PaymentTransaction).filter_by(order_id=db.query(Order).filter_by(order_number=order_number).one().id).one()
-            expect(stored.card_mask == "****9999", stored.card_mask)
-            expect(db.query(PaymentTransaction).count() == 1, "webhook created a duplicate transaction")
+            stored = db.query(Order).filter_by(order_number=order_number).one()
+            guest = db.query(User).filter(User.is_guest.is_(True)).order_by(User.id.desc()).first()
+            expect(guest is not None, "guest user missing")
+            expect(stored.customer_id == guest.customer_id, "order should use the signed-in customer")
+            expect(stored.payment_method == "paybox", stored.payment_method)
+            expect(stored.payment_url is None, "payment_url should stay empty")
+            admin = db.query(User).filter_by(username="Admin").one()
+            expect(admin.is_admin is True, "admin flag missing")
         finally:
             db.close()
 
-        pending = client.post("/api/v1/orders", json=customer("0502222222", day, product_id, 1))
-        expect(pending.status_code == 200, pending.text)
+        success = client.get(f"/order-success?order_id={order_number}&lang=en")
+        expect("Order confirmed" in success.text, "confirmation copy missing")
+        expect("PayBox" in success.text, "selected payment method missing from confirmation")
+
+        other = client.post(
+            "/checkout",
+            data={
+                "delivery_date": day,
+                "qty_" + str(product_id): "1",
+                "full_name": "Dana Cohen",
+                "phone": "0502222222",
+                "email": "dana@example.com",
+                "address": "8 Allenby Street, Tel Aviv",
+                "payment_method": "other",
+                "payment_other": "Friends and family",
+                "lang": "en",
+            },
+            follow_redirects=False,
+        )
+        expect(other.status_code == 303, "form checkout did not redirect")
+        expect("/order-success" in other.headers["location"], other.headers["location"])
+        other_page = client.get(other.headers["location"])
+        expect("Order confirmed" in other_page.text, "form checkout did not confirm the order")
+        expect("Friends and family" in other_page.text, "other payment text missing")
+
         blocked = client.post("/api/v1/orders", json=customer("0503333333", day, product_id, 1))
         expect(blocked.status_code == 400, "capacity was exceeded")
 
-        db = SessionLocal()
-        try:
-            held = db.query(Order).filter_by(order_number=pending.json()["order_number"]).one()
-            held.created_at = utcnow() - timedelta(minutes=45)
-            db.commit()
-        finally:
-            db.close()
-
-        released = client.post("/api/v1/orders", json=customer("0504444444", day, product_id, 1))
-        expect(released.status_code == 200, released.text)
-        form_checkout = client.post(
-            f"/pay/mock/{released.json()['order_number']}/complete",
+        client.post("/logout", data={"lang": "en"}, follow_redirects=False)
+        registered = client.post(
+            "/register",
+            data={"username": "baker_noa", "password": "secret12", "lang": "en", "next": "/"},
             follow_redirects=False,
         )
-        expect(form_checkout.status_code == 303, "mock payment did not redirect")
-        confirmed = client.get(form_checkout.headers["location"] if "lang=" in form_checkout.headers["location"] else form_checkout.headers["location"] + "&lang=en")
-        expect("Payment received" in confirmed.text, "mock payment did not confirm the order")
+        expect(registered.status_code == 303, "registration did not redirect")
+        signed_in = client.get("/?lang=en")
+        expect("baker_noa" in signed_in.text, "registered username missing from header")
+
+        client.post("/logout", data={"lang": "en"}, follow_redirects=False)
+        admin_login = client.post(
+            "/login",
+            data={"username": "Admin", "password": "Admin", "lang": "en", "next": "/admin"},
+            follow_redirects=False,
+        )
+        expect(admin_login.status_code == 303, "admin login failed")
+        admin_page = client.get("/admin?lang=en")
+        expect(admin_page.status_code == 200, "admin page missing")
+        expect("Bakery desk" in admin_page.text, "admin desk copy missing")
+        expect("Admin" in admin_page.text, "admin nav missing")
 
     print("order flow ok")
 

@@ -6,6 +6,9 @@
     const total = document.querySelector("[data-total]");
     const count = document.querySelector("[data-count]");
     const message = document.querySelector("#order-message");
+    const paymentInputs = Array.from(form.querySelectorAll('input[name="payment_method"]'));
+    const otherWrap = form.querySelector("[data-pay-other]");
+    const otherInput = form.querySelector('input[name="payment_other"]');
 
     const valueOf = (input) => {
       const parsed = Number.parseInt(input.value, 10);
@@ -13,6 +16,25 @@
     };
 
     const used = () => inputs.reduce((sum, input) => sum + valueOf(input), 0);
+
+    const selectedPayment = () => {
+      const chosen = paymentInputs.find((input) => input.checked);
+      return chosen ? chosen.value : "";
+    };
+
+    const syncPaymentOther = () => {
+      if (!otherWrap) {
+        return;
+      }
+      const show = selectedPayment() === "other";
+      otherWrap.classList.toggle("is-hidden", !show);
+      if (otherInput) {
+        otherInput.required = show;
+        if (!show) {
+          otherInput.value = "";
+        }
+      }
+    };
 
     const render = () => {
       let amount = 0;
@@ -61,50 +83,41 @@
       });
     });
 
+    paymentInputs.forEach((input) => {
+      input.addEventListener("change", syncPaymentOther);
+    });
+
     form.addEventListener("submit", (event) => {
+      if (message) {
+        message.textContent = "";
+      }
       if (used() < 1) {
         event.preventDefault();
-        message.textContent = form.dataset.chooseLoaf || "Choose at least one loaf.";
+        if (message) {
+          message.textContent = form.dataset.chooseLoaf || "Choose at least one loaf.";
+        }
+        return;
+      }
+      const method = selectedPayment();
+      if (!method) {
+        event.preventDefault();
+        if (message) {
+          message.textContent = form.dataset.choosePayment || "Choose how you will pay.";
+        }
+        return;
+      }
+      if (method === "other" && !(otherInput && otherInput.value.trim())) {
+        event.preventDefault();
+        if (message) {
+          message.textContent = form.dataset.enterPaymentOther || "Enter how you will pay.";
+        }
+        if (otherInput) {
+          otherInput.focus();
+        }
       }
     });
 
+    syncPaymentOther();
     render();
   }
-
-  const pending = document.querySelector("[data-poll-order]");
-  if (!pending) {
-    return;
-  }
-  const number = pending.getAttribute("data-poll-order");
-  const note = document.querySelector("[data-poll-note]");
-  let attempts = 0;
-
-  const watch = async () => {
-    attempts += 1;
-    try {
-      const response = await fetch(`/api/v1/orders/${encodeURIComponent(number)}`);
-      if (response.ok) {
-        const order = await response.json();
-        if (order.status === "PAID" || order.status === "DELIVERED") {
-          window.location.reload();
-          return;
-        }
-        if (order.status === "CANCELLED") {
-          window.location.href = `/order-failed?order_id=${encodeURIComponent(number)}`;
-          return;
-        }
-      }
-    } catch (_error) {
-      // Keep the confirmation text and try again.
-    }
-    if (attempts >= 30) {
-      if (note) {
-        note.textContent = pending.dataset.waitMessage || "This is taking longer than usual. Refresh this page in a moment.";
-      }
-      return;
-    }
-    window.setTimeout(watch, 2000);
-  };
-
-  window.setTimeout(watch, 2000);
 })();
