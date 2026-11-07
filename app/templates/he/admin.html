@@ -6,6 +6,9 @@
   <section class="shell confirm admin-desk">
     <p class="kicker">ניהול</p>
     <h1>שולחן המאפייה</h1>
+    {% if welcome_message %}
+      <p class="banner banner-welcome" role="status">{{ welcome_message }}</p>
+    {% endif %}
     <p class="lede">מחוברים כ־{{ current_user.username }}. בחרו פעולת ניהול.</p>
     <nav class="admin-actions" aria-label="פעולות ניהול">
       <a class="admin-action" href="/admin/change-password?lang=he">שינוי סיסמת משתמש</a>

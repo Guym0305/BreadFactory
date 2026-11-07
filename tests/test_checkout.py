@@ -287,12 +287,21 @@ def main() -> None:
         expect(duplicate.status_code == 400, "duplicate customer phone was accepted")
         expect("phone number already belongs" in duplicate.text, "duplicate phone message missing")
 
-        client.post(
+        bad_login = client.post(
+            "/login",
+            data={"username": "baker_noa", "password": "wrong-pass", "lang": "en", "next": "/"},
+        )
+        expect(bad_login.status_code == 400, "bad password was accepted")
+        expect("Wrong username or password." in bad_login.text, "login error message missing")
+
+        good_login = client.post(
             "/login",
             data={"username": "baker_noa", "password": "secret12", "lang": "en", "next": "/"},
             follow_redirects=False,
         )
+        expect(good_login.status_code == 303, "good login did not redirect")
         returned = client.get("/?week=next&lang=en")
+        expect("Wonderful to see you again, baker_noa" in returned.text, "welcome message missing")
         expect('value="Noa Baker"' in returned.text, "returning user lost saved customer details")
         expect('value="noa.baker@example.com"' in returned.text, "returning user lost saved email")
         client.post("/logout", data={"lang": "en"}, follow_redirects=False)

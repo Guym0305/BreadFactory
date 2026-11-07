@@ -16,7 +16,9 @@ from app.services.auth import (
     create_guest_user,
     current_user,
     customer_form_defaults,
+    login_display_name,
     register_user,
+    set_login_welcome,
     set_session_user,
 )
 from app.services.checkout import checkout_from_form, create_checkout
@@ -195,16 +197,17 @@ async def login_submit(request: Request, db: Session = Depends(get_db)):
             "login.html",
             {
                 "next": requested_next,
-                "error": exc.message,
+                "error": exc.message or t("login_failed"),
                 "mode": "login",
                 "saved_username": username.strip(),
                 "saved_register": {},
                 "current_user": None,
             },
-            status_code=exc.status_code,
+            status_code=exc.status_code if exc.status_code >= 400 else 400,
         )
     response = RedirectResponse(redirect_path(_resolve_next_path(user, requested_next)), status_code=303)
     set_session_user(response, user.id)
+    set_login_welcome(response, login_display_name(user))
     return response
 
 

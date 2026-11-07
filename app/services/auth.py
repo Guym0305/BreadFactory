@@ -15,6 +15,7 @@ from app.schemas.order import EMAIL_RE, PHONE_RE
 from app.services.errors import CheckoutError
 
 SESSION_COOKIE = "bf_session"
+WELCOME_COOKIE = "bf_welcome"
 USERNAME_RE = re.compile(r"^[A-Za-z0-9_]{3,40}$")
 PLACEHOLDER_EMAIL_SUFFIX = "@users.local"
 PLACEHOLDER_ADDRESS = "-"
@@ -77,6 +78,33 @@ def set_session_user(response: Response, user_id: int) -> None:
 
 def clear_session(response: Response) -> None:
     response.delete_cookie(SESSION_COOKIE, path="/")
+    response.delete_cookie(WELCOME_COOKIE, path="/")
+
+
+def set_login_welcome(response: Response, display_name: str) -> None:
+    token = urlsafe_b64encode(display_name.encode("utf-8")).decode("ascii")
+    response.set_cookie(
+        WELCOME_COOKIE,
+        token,
+        max_age=120,
+        httponly=True,
+        samesite="lax",
+        path="/",
+    )
+
+
+def consume_login_welcome(request: Request) -> str | None:
+    token = request.cookies.get(WELCOME_COOKIE)
+    if not token:
+        return None
+    try:
+        return urlsafe_b64decode(token.encode("ascii")).decode("utf-8").strip() or None
+    except (ValueError, UnicodeDecodeError):
+        return None
+
+
+def login_display_name(user: User) -> str:
+    return user.username
 
 
 def current_user(request: Request, db: Session) -> User | None:
@@ -239,7 +267,12 @@ def register_user(
 
 
 def authenticate_user(db: Session, username: str, password: str) -> User:
-    normalize_username(username)
+    if not username.strip() or not password:
+        raise CheckoutError(t("login_failed"))
+    try:
+        normalize_username(username)
+    except CheckoutError as exc:
+        raise CheckoutError(t("login_failed")) from exc
     user = _find_user_by_username(db, username)
     if user is None or user.is_guest or not verify_password(password, user.password_hash):
         raise CheckoutError(t("login_failed"))

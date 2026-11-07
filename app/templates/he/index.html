@@ -17,6 +17,9 @@
 
   <section class="shell choose" id="delivery" aria-labelledby="delivery-heading">
     <h2 id="delivery-heading">{% if week == 'next' %}השבוע הבא{% else %}השבוע{% endif %}</h2>
+    {% if welcome_message %}
+      <p class="banner banner-welcome" role="status">{{ welcome_message }}</p>
+    {% endif %}
     {% if error %}
       <p class="banner" role="alert">{{ error }}</p>
     {% endif %}

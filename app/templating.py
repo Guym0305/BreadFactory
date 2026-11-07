@@ -6,6 +6,7 @@ from fastapi.templating import Jinja2Templates
 from pathlib import Path
 
 from app.i18n import get_lang, language_switch, resolve_lang, set_lang, t
+from app.services.auth import WELCOME_COOKIE, consume_login_welcome
 from app.services.slots import DELIVERY_WINDOW, MONTHS, WEEKDAYS
 
 PAYMENT_LABEL_KEYS = {
@@ -26,10 +27,19 @@ def render(request: Request, name: str, context: dict, status_code: int = 200) -
     context["lang"] = lang
     context.setdefault("week", "coming")
     context.setdefault("current_user", None)
+    welcome_name = context.pop("welcome_name", None)
+    if welcome_name is None:
+        welcome_name = consume_login_welcome(request)
+    if welcome_name:
+        context["welcome_message"] = t("welcome_back", name=welcome_name)
+    else:
+        context.setdefault("welcome_message", None)
     context["switch_he"] = language_switch(request, "he")
     context["switch_en"] = language_switch(request, "en")
     response = HTMLResponse(templates.get_template(f"{lang}/{name}").render(context), status_code=status_code)
     response.set_cookie("bf_lang", lang, max_age=60 * 60 * 24 * 365, samesite="lax", path="/")
+    if request.cookies.get(WELCOME_COOKIE):
+        response.delete_cookie(WELCOME_COOKIE, path="/")
     return response
 
 

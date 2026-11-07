@@ -312,6 +312,13 @@ h1.brand-display {
   margin-bottom: 1.25rem;
 }
 
+.banner-welcome {
+  border-color: var(--color-olive);
+  color: var(--color-olive);
+  font-family: var(--font-serif);
+  font-size: 1.15rem;
+}
+
 .week-card {
   display: grid;
   grid-template-columns: 1fr;
