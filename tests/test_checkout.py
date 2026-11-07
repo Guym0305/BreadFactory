@@ -212,7 +212,9 @@ def main() -> None:
 
         success = client.get(f"/order-success?order_id={order_number}&lang=en")
         expect("Order confirmed" in success.text, "confirmation copy missing")
+        expect(f"Already rushing to bake order: {order_number}" in success.text, "confirmation headline missing")
         expect("PayBox" in success.text, "selected payment method missing from confirmation")
+        expect("Noa Levi" in success.text, "customer name missing from confirmation")
 
         other = client.post(
             "/checkout",
@@ -232,8 +234,11 @@ def main() -> None:
         expect(other.status_code == 303, "form checkout did not redirect")
         expect("/order-success" in other.headers["location"], other.headers["location"])
         other_page = client.get(other.headers["location"])
-        expect("Order confirmed" in other_page.text, "form checkout did not confirm the order")
+        expect("Order confirmed" in other_page.text, "guest form checkout did not confirm the order")
+        expect("Already rushing to bake order:" in other_page.text, "guest confirmation headline missing")
+        expect("Dana Cohen" in other_page.text, "guest customer name missing from confirmation")
         expect("Friends and family" in other_page.text, "other payment text missing")
+        expect("8 Allenby Street, Tel Aviv" in other_page.text, "guest delivery address missing")
 
         blocked = client.post("/api/v1/orders", json=customer("0503333333", day, product_id, 1))
         expect(blocked.status_code == 400, "capacity was exceeded")

@@ -4,13 +4,21 @@
 {% block content %}
   <section class="shell confirm">
     {% if order is none %}
-      <h1>We cannot find that order.</h1>
+      <p class="confirm-message">We cannot find that order.</p>
       <p class="lede"><a href="/?lang=en">Back to home</a></p>
     {% else %}
       <p class="kicker">Order confirmed</p>
-      <h1>We’ll bake {{ order.order_number }}.</h1>
+      <p class="confirm-message">Already rushing to bake order: {{ order.order_number }}</p>
       <p class="lede">Delivery on {{ order.delivery_date|delivery_label(lang) }}, between {{ delivery_window }}, to {{ order.customer.address }}.</p>
       <ul class="summary">
+        <li>
+          <span>Name</span>
+          <span>{{ order.customer.full_name }}</span>
+        </li>
+        <li>
+          <span>Phone</span>
+          <span>{{ order.customer.phone }}</span>
+        </li>
         {% for item in order.items %}
           <li>
             <span>{{ item.quantity }} × {{ item.product.name_en or item.product.name }}</span>
@@ -26,7 +34,7 @@
           <span>{{ order.total_amount|money }}</span>
         </li>
       </ul>
-      <p><a class="pay-button" href="/?lang=en">Back to home</a></p>
+      <p><a class="pay-button" href="{% if current_user %}/?lang=en{% else %}/login?lang=en{% endif %}">Back to home</a></p>
     {% endif %}
   </section>
 {% endblock %}

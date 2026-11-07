@@ -4,13 +4,21 @@
 {% block content %}
   <section class="shell confirm">
     {% if order is none %}
-      <h1>לא מצאנו את ההזמנה.</h1>
+      <p class="confirm-message">לא מצאנו את ההזמנה.</p>
       <p class="lede"><a href="/?lang=he">חזרה לדף הבית</a></p>
     {% else %}
       <p class="kicker">ההזמנה אושרה</p>
-      <h1>נאפה את {{ order.order_number }}.</h1>
+      <p class="confirm-message">כבר רצים לאפות את הזמנה: {{ order.order_number }}</p>
       <p class="lede">המשלוח ב{{ order.delivery_date|delivery_label(lang) }}, בין {{ delivery_window }}, אל {{ order.customer.address }}.</p>
       <ul class="summary">
+        <li>
+          <span>שם</span>
+          <span>{{ order.customer.full_name }}</span>
+        </li>
+        <li>
+          <span>טלפון</span>
+          <span>{{ order.customer.phone }}</span>
+        </li>
         {% for item in order.items %}
           <li>
             <span>{{ item.quantity }} × {{ item.product.name_he or item.product.name }}</span>
@@ -26,7 +34,7 @@
           <span>{{ order.total_amount|money }}</span>
         </li>
       </ul>
-      <p><a class="pay-button" href="/?lang=he">חזרה לדף הבית</a></p>
+      <p><a class="pay-button" href="{% if current_user %}/?lang=he{% else %}/login?lang=he{% endif %}">חזרה לדף הבית</a></p>
     {% endif %}
   </section>
 {% endblock %}
