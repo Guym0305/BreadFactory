@@ -241,24 +241,86 @@ def main() -> None:
         client.post("/logout", data={"lang": "en"}, follow_redirects=False)
         registered = client.post(
             "/register",
-            data={"username": "baker_noa", "password": "secret12", "lang": "en", "next": "/"},
+            data={
+                "username": "baker_noa",
+                "password": "secret12",
+                "full_name": "Noa Baker",
+                "phone": "0506666666",
+                "email": "noa.baker@example.com",
+                "address": "5 Bread Lane, Jerusalem",
+                "lang": "en",
+                "next": "/",
+            },
             follow_redirects=False,
         )
         expect(registered.status_code == 303, "registration did not redirect")
-        signed_in = client.get("/?lang=en")
+        signed_in = client.get("/?week=next&lang=en")
         expect("baker_noa" in signed_in.text, "registered username missing from header")
+        expect('value="Noa Baker"' in signed_in.text, "registered customer name was not prefilled")
+        expect('value="0506666666"' in signed_in.text, "registered customer phone was not prefilled")
+        expect("5 Bread Lane, Jerusalem" in signed_in.text, "registered customer address was not prefilled")
+
+        db = SessionLocal()
+        try:
+            linked = db.query(User).filter_by(username="baker_noa").one()
+            expect(linked.customer_id is not None, "registered user missing customer link")
+            expect(linked.customer.full_name == "Noa Baker", linked.customer.full_name)
+            expect(linked.customer.phone == "0506666666", linked.customer.phone)
+            expect(linked.customer.email == "noa.baker@example.com", linked.customer.email)
+        finally:
+            db.close()
+
+        client.post("/logout", data={"lang": "en"}, follow_redirects=False)
+        duplicate = client.post(
+            "/register",
+            data={
+                "username": "other_noa",
+                "password": "secret12",
+                "full_name": "Other Noa",
+                "phone": "0506666666",
+                "email": "other.noa@example.com",
+                "address": "9 Other Street, Tel Aviv",
+                "lang": "en",
+                "next": "/",
+            },
+        )
+        expect(duplicate.status_code == 400, "duplicate customer phone was accepted")
+        expect("phone number already belongs" in duplicate.text, "duplicate phone message missing")
+
+        client.post(
+            "/login",
+            data={"username": "baker_noa", "password": "secret12", "lang": "en", "next": "/"},
+            follow_redirects=False,
+        )
+        returned = client.get("/?week=next&lang=en")
+        expect('value="Noa Baker"' in returned.text, "returning user lost saved customer details")
+        expect('value="noa.baker@example.com"' in returned.text, "returning user lost saved email")
+        client.post("/logout", data={"lang": "en"}, follow_redirects=False)
 
         client.post("/logout", data={"lang": "en"}, follow_redirects=False)
         admin_login = client.post(
             "/login",
-            data={"username": "Admin", "password": "Admin", "lang": "en", "next": "/admin"},
+            data={"username": "Admin", "password": "Admin", "lang": "en", "next": "/"},
             follow_redirects=False,
         )
         expect(admin_login.status_code == 303, "admin login failed")
+        expect("/admin" in admin_login.headers["location"], admin_login.headers["location"])
+        home_as_admin = client.get("/?lang=en", follow_redirects=False)
+        expect(home_as_admin.status_code == 302, "admin should not see the regular home")
+        expect("/admin" in home_as_admin.headers["location"], home_as_admin.headers["location"])
         admin_page = client.get("/admin?lang=en")
         expect(admin_page.status_code == 200, "admin page missing")
         expect("Bakery desk" in admin_page.text, "admin desk copy missing")
-        expect("Admin" in admin_page.text, "admin nav missing")
+        expect("Change user password" in admin_page.text, "password action missing")
+        expect("Update bakery content" in admin_page.text, "content action missing")
+        expect("Generate delivery list" in admin_page.text, "delivery action missing")
+        password_page = client.get("/admin/change-password?lang=en")
+        expect(password_page.status_code == 200, "password placeholder missing")
+        expect("Back to admin" in password_page.text, "password back link missing")
+        content_page = client.get("/admin/update-content?lang=en")
+        expect("Update bakery content" in content_page.text, "content placeholder missing")
+        delivery_page = client.get("/admin/delivery-list?lang=en")
+        expect("Generate delivery list" in delivery_page.text, "delivery placeholder missing")
 
     print("order flow ok")
 

@@ -46,8 +46,8 @@ class Customer(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     full_name = Column(String(100), nullable=False)
-    phone = Column(String(20), nullable=False, index=True)
-    email = Column(String(100), nullable=False)
+    phone = Column(String(20), nullable=False, unique=True, index=True)
+    email = Column(String(100), nullable=False, unique=True, index=True)
     address = Column(Text, nullable=False)
     created_at = Column(DateTime, default=utcnow)
 

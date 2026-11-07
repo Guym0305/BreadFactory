@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from app.models.bakery import Customer, Order, OrderItem, OrderStatus, User
 from app.schemas.order import CheckoutIn, OrderCreated
 from app.i18n import t
+from app.services.auth import assert_customer_credentials_available
 from app.services.errors import CheckoutError
 from app.services.orders import serialize_order
 from app.services.slots import delivery_datetime, require_slot
@@ -66,25 +67,26 @@ def create_checkout(db: Session, data: CheckoutIn, user: User | None = None) -> 
         customer = db.query(Customer).filter(Customer.id == user.customer_id).one_or_none()
         if customer is None:
             raise CheckoutError(t("login_required"), 401)
+        assert_customer_credentials_available(
+            db,
+            phone=data.phone,
+            email=data.email,
+            exclude_customer_id=customer.id,
+        )
         customer.full_name = data.full_name
         customer.phone = data.phone
         customer.email = data.email
         customer.address = data.address
     else:
-        customer = db.query(Customer).filter(Customer.phone == data.phone).one_or_none()
-        if customer is None:
-            customer = Customer(
-                full_name=data.full_name,
-                phone=data.phone,
-                email=data.email,
-                address=data.address,
-            )
-            db.add(customer)
-            db.flush()
-        else:
-            customer.full_name = data.full_name
-            customer.email = data.email
-            customer.address = data.address
+        assert_customer_credentials_available(db, phone=data.phone, email=data.email)
+        customer = Customer(
+            full_name=data.full_name,
+            phone=data.phone,
+            email=data.email,
+            address=data.address,
+        )
+        db.add(customer)
+        db.flush()
 
     total = round(sum(product.price * quantity for product, quantity in chosen), 2)
     order = Order(

@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session, joinedload
 from app.config import get_settings
 from app.i18n import t
 from app.models.bakery import Customer, User, utcnow
+from app.schemas.order import EMAIL_RE, PHONE_RE
 from app.services.errors import CheckoutError
 
 SESSION_COOKIE = "bf_session"
@@ -133,6 +134,56 @@ def normalize_username(value: str) -> str:
     return cleaned.lower()
 
 
+def normalize_phone(value: str) -> str:
+    cleaned = re.sub(r"[\s\-()]", "", value.strip())
+    if not PHONE_RE.fullmatch(cleaned):
+        raise CheckoutError(t("phone"))
+    return cleaned
+
+
+def normalize_email(value: str) -> str:
+    cleaned = value.strip().lower()
+    if len(cleaned) > 100 or not EMAIL_RE.fullmatch(cleaned):
+        raise CheckoutError(t("email"))
+    return cleaned
+
+
+def normalize_full_name(value: str) -> str:
+    cleaned = value.strip()
+    if not cleaned:
+        raise CheckoutError(t("enter_name"))
+    if len(cleaned) > 100:
+        raise CheckoutError(t("name_long"))
+    return cleaned
+
+
+def normalize_address(value: str) -> str:
+    cleaned = value.strip()
+    if not cleaned:
+        raise CheckoutError(t("enter_address"))
+    if len(cleaned) > 500:
+        raise CheckoutError(t("address_long"))
+    return cleaned
+
+
+def assert_customer_credentials_available(
+    db: Session,
+    *,
+    phone: str,
+    email: str,
+    exclude_customer_id: int | None = None,
+) -> None:
+    phone_query = db.query(Customer).filter(Customer.phone == phone)
+    email_query = db.query(Customer).filter(func.lower(Customer.email) == email.lower())
+    if exclude_customer_id is not None:
+        phone_query = phone_query.filter(Customer.id != exclude_customer_id)
+        email_query = email_query.filter(Customer.id != exclude_customer_id)
+    if phone_query.first() is not None:
+        raise CheckoutError(t("phone_taken"))
+    if email_query.first() is not None:
+        raise CheckoutError(t("email_taken"))
+
+
 def _find_user_by_username(db: Session, username: str) -> User | None:
     return (
         db.query(User)
@@ -142,13 +193,35 @@ def _find_user_by_username(db: Session, username: str) -> User | None:
     )
 
 
-def register_user(db: Session, username: str, password: str) -> User:
+def register_user(
+    db: Session,
+    username: str,
+    password: str,
+    *,
+    full_name: str,
+    phone: str,
+    email: str,
+    address: str,
+) -> User:
     name = normalize_username(username)
     if len(password) < 6 or len(password) > 100:
         raise CheckoutError(t("password_invalid"))
     if _find_user_by_username(db, name) is not None:
         raise CheckoutError(t("username_taken"))
-    customer = _provisional_customer(name)
+
+    cleaned_name = normalize_full_name(full_name)
+    cleaned_phone = normalize_phone(phone)
+    cleaned_email = normalize_email(email)
+    cleaned_address = normalize_address(address)
+    assert_customer_credentials_available(db, phone=cleaned_phone, email=cleaned_email)
+
+    customer = Customer(
+        full_name=cleaned_name,
+        phone=cleaned_phone,
+        email=cleaned_email,
+        address=cleaned_address,
+        created_at=utcnow(),
+    )
     db.add(customer)
     db.flush()
     user = User(
@@ -161,6 +234,7 @@ def register_user(db: Session, username: str, password: str) -> User:
     db.add(user)
     db.commit()
     db.refresh(user)
+    db.refresh(customer)
     return user
 
 

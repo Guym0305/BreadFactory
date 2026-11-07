@@ -6,7 +6,7 @@
   <section class="shell login">
     <p class="kicker">חשבון</p>
     <h1>התחברו כדי להזמין</h1>
-    <p class="lede">הירשמו עם שם משתמש וסיסמה, או המשיכו כאורח. ההזמנות נשמרות בפרופיל הלקוח שלכם.</p>
+    <p class="lede">הירשמו פעם אחת עם הפרטים שלכם. בביקורים הבאים הפרופיל כבר יהיה שמור. או המשיכו כאורח.</p>
     {% if error %}
       <p class="banner" role="alert">{{ error }}</p>
     {% endif %}
@@ -33,11 +33,27 @@
         <h2>הרשמה</h2>
         <label>
           <span>שם משתמש</span>
-          <input name="username" required maxlength="40" autocomplete="username" value="{{ saved_username if mode == 'register' else '' }}">
+          <input name="username" required maxlength="40" autocomplete="username" value="{{ saved_register.get('username', '') if mode == 'register' else '' }}">
         </label>
         <label>
           <span>סיסמה</span>
           <input name="password" type="password" required minlength="6" maxlength="100" autocomplete="new-password">
+        </label>
+        <label>
+          <span>שם מלא</span>
+          <input name="full_name" required maxlength="100" autocomplete="name" value="{{ saved_register.get('full_name', '') if mode == 'register' else '' }}">
+        </label>
+        <label>
+          <span>טלפון</span>
+          <input name="phone" type="tel" required maxlength="20" autocomplete="tel" value="{{ saved_register.get('phone', '') if mode == 'register' else '' }}">
+        </label>
+        <label>
+          <span>דוא״ל</span>
+          <input name="email" type="email" required maxlength="100" autocomplete="email" value="{{ saved_register.get('email', '') if mode == 'register' else '' }}">
+        </label>
+        <label>
+          <span>כתובת למשלוח</span>
+          <textarea name="address" required maxlength="500" rows="2" autocomplete="street-address">{{ saved_register.get('address', '') if mode == 'register' else '' }}</textarea>
         </label>
         <button class="pay-button" type="submit">יצירת חשבון</button>
       </form>

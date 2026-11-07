@@ -1,0 +1,12 @@
+{% extends "he/base.html" %}
+{% block title %}{{ page_title }} · לחם בהר{% endblock %}
+{% block body_class %}is-admin{% endblock %}
+
+{% block content %}
+  <section class="shell confirm admin-desk">
+    <p class="kicker">ניהול</p>
+    <h1>{{ page_title }}</h1>
+    <p class="lede">{{ page_lede }}</p>
+    <p><a class="pay-button" href="/admin?lang=he">חזרה לניהול</a></p>
+  </section>
+{% endblock %}

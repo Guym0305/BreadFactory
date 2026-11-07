@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from app.config import get_settings
 from app.database import get_db
 from app.i18n import get_lang, resolve_lang, set_lang, t
-from app.models.bakery import Order, OrderStatus, Product, User
+from app.models.bakery import OrderStatus, Product
 from app.security import assert_same_origin
 from app.services.auth import (
     authenticate_user,
@@ -80,10 +80,38 @@ def _next_path(raw: str | None) -> str:
     return path
 
 
+def _resolve_next_path(user, raw: str | None) -> str:
+    next_path = _next_path(raw)
+    if user is not None and user.is_admin and next_path in ("/", ""):
+        return "/admin"
+    return next_path
+
+
 def _login_redirect(request: Request, next_path: str = "/") -> RedirectResponse:
     lang = get_lang()
     target = quote(_next_path(next_path), safe="/?&=%")
     return RedirectResponse(redirect_path(f"/login?next={target}", lang), status_code=303)
+
+
+def _require_admin(request: Request, db: Session):
+    user = current_user(request, db)
+    if user is None:
+        return None, _login_redirect(request, request.url.path)
+    if not user.is_admin:
+        raise HTTPException(status_code=403, detail=t("admin_only"))
+    return user, None
+
+
+def _render_admin_placeholder(request: Request, user, *, title: str, lede: str):
+    return render(
+        request,
+        "admin_placeholder.html",
+        {
+            "current_user": user,
+            "page_title": title,
+            "page_lede": lede,
+        },
+    )
 
 
 def _render_home(
@@ -136,7 +164,7 @@ def login_page(
     resolve_lang(request)
     user = current_user(request, db)
     if user is not None:
-        return RedirectResponse(redirect_path(_next_path(next)), status_code=302)
+        return RedirectResponse(redirect_path(_resolve_next_path(user, next)), status_code=302)
     return render(
         request,
         "login.html",
@@ -145,6 +173,7 @@ def login_page(
             "error": None,
             "mode": "login",
             "saved_username": "",
+            "saved_register": {},
             "current_user": None,
         },
     )
@@ -154,7 +183,7 @@ def login_page(
 async def login_submit(request: Request, db: Session = Depends(get_db)):
     form = await request.form()
     _use_lang(request, str(form.get("lang")) if form.get("lang") else None)
-    next_path = _next_path(str(form.get("next") or "/"))
+    requested_next = _next_path(str(form.get("next") or "/"))
     username = str(form.get("username") or "")
     password = str(form.get("password") or "")
     try:
@@ -165,15 +194,16 @@ async def login_submit(request: Request, db: Session = Depends(get_db)):
             request,
             "login.html",
             {
-                "next": next_path,
+                "next": requested_next,
                 "error": exc.message,
                 "mode": "login",
                 "saved_username": username.strip(),
+                "saved_register": {},
                 "current_user": None,
             },
             status_code=exc.status_code,
         )
-    response = RedirectResponse(redirect_path(next_path), status_code=303)
+    response = RedirectResponse(redirect_path(_resolve_next_path(user, requested_next)), status_code=303)
     set_session_user(response, user.id)
     return response
 
@@ -185,9 +215,24 @@ async def register_submit(request: Request, db: Session = Depends(get_db)):
     next_path = _next_path(str(form.get("next") or "/"))
     username = str(form.get("username") or "")
     password = str(form.get("password") or "")
+    saved_register = {
+        "username": username.strip(),
+        "full_name": str(form.get("full_name") or ""),
+        "phone": str(form.get("phone") or ""),
+        "email": str(form.get("email") or ""),
+        "address": str(form.get("address") or ""),
+    }
     try:
         assert_same_origin(request)
-        user = register_user(db, username, password)
+        user = register_user(
+            db,
+            username,
+            password,
+            full_name=saved_register["full_name"],
+            phone=saved_register["phone"],
+            email=saved_register["email"],
+            address=saved_register["address"],
+        )
     except CheckoutError as exc:
         return render(
             request,
@@ -196,7 +241,8 @@ async def register_submit(request: Request, db: Session = Depends(get_db)):
                 "next": next_path,
                 "error": exc.message,
                 "mode": "register",
-                "saved_username": username.strip(),
+                "saved_username": saved_register["username"],
+                "saved_register": saved_register,
                 "current_user": None,
             },
             status_code=exc.status_code,
@@ -223,6 +269,7 @@ async def guest_submit(request: Request, db: Session = Depends(get_db)):
                 "error": exc.message,
                 "mode": "login",
                 "saved_username": "",
+                "saved_register": {},
                 "current_user": None,
             },
             status_code=exc.status_code,
@@ -248,21 +295,78 @@ async def logout_submit(request: Request, db: Session = Depends(get_db)):
 @router.get("/admin")
 def admin_page(request: Request, db: Session = Depends(get_db)):
     resolve_lang(request)
-    user = current_user(request, db)
-    if user is None:
-        return _login_redirect(request, "/admin")
-    if not user.is_admin:
-        raise HTTPException(status_code=403, detail=t("admin_only"))
+    user, redirect = _require_admin(request, db)
+    if redirect is not None:
+        return redirect
     return render(
         request,
         "admin.html",
         {
             "current_user": user,
-            "users_count": db.query(User).count(),
-            "orders_count": db.query(Order).count(),
-            "guests_count": db.query(User).filter(User.is_guest.is_(True)).count(),
-            "admins_count": db.query(User).filter(User.is_admin.is_(True)).count(),
         },
+    )
+
+
+@router.get("/admin/change-password")
+def admin_change_password(request: Request, db: Session = Depends(get_db)):
+    resolve_lang(request)
+    user, redirect = _require_admin(request, db)
+    if redirect is not None:
+        return redirect
+    if get_lang() == "he":
+        return _render_admin_placeholder(
+            request,
+            user,
+            title="שינוי סיסמת משתמש",
+            lede="המסך הזה יתווסף בהמשך. כרגע אין כאן פעולה.",
+        )
+    return _render_admin_placeholder(
+        request,
+        user,
+        title="Change user password",
+        lede="This screen will be added later. Nothing happens here yet.",
+    )
+
+
+@router.get("/admin/update-content")
+def admin_update_content(request: Request, db: Session = Depends(get_db)):
+    resolve_lang(request)
+    user, redirect = _require_admin(request, db)
+    if redirect is not None:
+        return redirect
+    if get_lang() == "he":
+        return _render_admin_placeholder(
+            request,
+            user,
+            title="עדכון תוכן המאפייה",
+            lede="המסך הזה יתווסף בהמשך. כרגע אין כאן פעולה.",
+        )
+    return _render_admin_placeholder(
+        request,
+        user,
+        title="Update bakery content",
+        lede="This screen will be added later. Nothing happens here yet.",
+    )
+
+
+@router.get("/admin/delivery-list")
+def admin_delivery_list(request: Request, db: Session = Depends(get_db)):
+    resolve_lang(request)
+    user, redirect = _require_admin(request, db)
+    if redirect is not None:
+        return redirect
+    if get_lang() == "he":
+        return _render_admin_placeholder(
+            request,
+            user,
+            title="הפקת רשימת משלוחים",
+            lede="המסך הזה יתווסף בהמשך. כרגע אין כאן פעולה.",
+        )
+    return _render_admin_placeholder(
+        request,
+        user,
+        title="Generate delivery list",
+        lede="This screen will be added later. Nothing happens here yet.",
     )
 
 
@@ -279,6 +383,8 @@ def home(
         if request.url.query:
             next_path = f"{next_path}?{request.url.query}"
         return _login_redirect(request, next_path)
+    if user.is_admin:
+        return RedirectResponse(redirect_path("/admin"), status_code=302)
     selected = _parse_date(delivery_date)
     week = "next" if request.query_params.get("week") == "next" else "coming"
     error = None

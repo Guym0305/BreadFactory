@@ -1,17 +1,16 @@
 {% extends "he/base.html" %}
 {% block title %}ניהול · לחם בהר{% endblock %}
+{% block body_class %}is-admin{% endblock %}
 
 {% block content %}
-  <section class="shell confirm">
+  <section class="shell confirm admin-desk">
     <p class="kicker">ניהול</p>
     <h1>שולחן המאפייה</h1>
-    <p class="lede">מחוברים כ־{{ current_user.username }}. כאן אפשר להוסיף מסכי ניהול נוספים.</p>
-    <ul class="summary">
-      <li><span>משתמשים</span><span>{{ users_count }}</span></li>
-      <li><span>אורחים</span><span>{{ guests_count }}</span></li>
-      <li><span>מנהלים</span><span>{{ admins_count }}</span></li>
-      <li class="total"><span>הזמנות</span><span>{{ orders_count }}</span></li>
-    </ul>
-    <p><a class="pay-button" href="/?lang=he">חזרה להזמנה</a></p>
+    <p class="lede">מחוברים כ־{{ current_user.username }}. בחרו פעולת ניהול.</p>
+    <nav class="admin-actions" aria-label="פעולות ניהול">
+      <a class="admin-action" href="/admin/change-password?lang=he">שינוי סיסמת משתמש</a>
+      <a class="admin-action" href="/admin/update-content?lang=he">עדכון תוכן המאפייה</a>
+      <a class="admin-action" href="/admin/delivery-list?lang=he">הפקת רשימת משלוחים</a>
+    </nav>
   </section>
 {% endblock %}

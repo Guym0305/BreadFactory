@@ -48,7 +48,7 @@ class CheckoutIn(BaseModel):
     @field_validator("email")
     @classmethod
     def email_address(cls, value: str) -> str:
-        cleaned = value.strip()
+        cleaned = value.strip().lower()
         if len(cleaned) > 100 or not EMAIL_RE.fullmatch(cleaned):
             raise ValueError(t("email"))
         return cleaned

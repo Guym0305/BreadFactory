@@ -6,7 +6,7 @@
   <section class="shell login">
     <p class="kicker">Account</p>
     <h1>Sign in to order</h1>
-    <p class="lede">Register with a username and password, or continue as guest. Orders are saved to your customer profile.</p>
+    <p class="lede">Register with your details once. Next visits keep your customer profile. Or continue as guest.</p>
     {% if error %}
       <p class="banner" role="alert">{{ error }}</p>
     {% endif %}
@@ -33,11 +33,27 @@
         <h2>Register</h2>
         <label>
           <span>Username</span>
-          <input name="username" required maxlength="40" autocomplete="username" value="{{ saved_username if mode == 'register' else '' }}">
+          <input name="username" required maxlength="40" autocomplete="username" value="{{ saved_register.get('username', '') if mode == 'register' else '' }}">
         </label>
         <label>
           <span>Password</span>
           <input name="password" type="password" required minlength="6" maxlength="100" autocomplete="new-password">
+        </label>
+        <label>
+          <span>Full name</span>
+          <input name="full_name" required maxlength="100" autocomplete="name" value="{{ saved_register.get('full_name', '') if mode == 'register' else '' }}">
+        </label>
+        <label>
+          <span>Phone</span>
+          <input name="phone" type="tel" required maxlength="20" autocomplete="tel" value="{{ saved_register.get('phone', '') if mode == 'register' else '' }}">
+        </label>
+        <label>
+          <span>Email</span>
+          <input name="email" type="email" required maxlength="100" autocomplete="email" value="{{ saved_register.get('email', '') if mode == 'register' else '' }}">
+        </label>
+        <label>
+          <span>Delivery address</span>
+          <textarea name="address" required maxlength="500" rows="2" autocomplete="street-address">{{ saved_register.get('address', '') if mode == 'register' else '' }}</textarea>
         </label>
         <button class="pay-button" type="submit">Create account</button>
       </form>
