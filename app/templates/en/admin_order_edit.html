@@ -20,13 +20,55 @@
       <div><dt>Delivery</dt><dd>{{ order.delivery_date.date().isoformat() }}</dd></div>
       <div><dt>Total</dt><dd>₪{{ '%.2f'|format(order.total_amount) }}</dd></div>
     </dl>
-    <ul class="admin-lines">
-      {% for item in order.items %}
-        <li>{{ item.quantity }} × {{ product_label(item.product, lang) }} — ₪{{ '%.2f'|format(item.unit_price) }}</li>
-      {% endfor %}
-    </ul>
     <form class="admin-form" method="post" action="/admin/orders/{{ order.id }}">
       <input type="hidden" name="lang" value="en">
+      <fieldset class="admin-lines-edit">
+        <legend>Order lines</legend>
+        {% for item in order.items %}
+          <div class="admin-line-row">
+            <input type="hidden" name="item_id" value="{{ item.id }}">
+            <label>
+              <span>Product</span>
+              <select name="item_product_id" required>
+                {% for product in products %}
+                  <option value="{{ product.id }}" {% if product.id == item.product_id %}selected{% endif %}>{{ product_label(product, lang) }}</option>
+                {% endfor %}
+              </select>
+            </label>
+            <label>
+              <span>Qty</span>
+              <input name="item_quantity" type="number" min="1" max="99" required value="{{ item.quantity }}">
+            </label>
+            <label>
+              <span>Unit ₪</span>
+              <input name="item_unit_price" required value="{{ '%.2f'|format(item.unit_price) }}">
+            </label>
+            <label class="admin-check">
+              <input type="checkbox" name="item_remove" value="{{ item.id }}">
+              <span>Remove</span>
+            </label>
+          </div>
+        {% endfor %}
+        <div class="admin-line-row admin-line-new">
+          <label>
+            <span>Add product</span>
+            <select name="new_product_id">
+              <option value="">—</option>
+              {% for product in products %}
+                <option value="{{ product.id }}">{{ product_label(product, lang) }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <label>
+            <span>Qty</span>
+            <input name="new_quantity" type="number" min="1" max="99" value="1">
+          </label>
+          <label>
+            <span>Unit ₪</span>
+            <input name="new_unit_price" placeholder="auto">
+          </label>
+        </div>
+      </fieldset>
       <label>
         <span>Status</span>
         <select name="status" required>

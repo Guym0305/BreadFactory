@@ -418,6 +418,88 @@ def main() -> None:
         expect(delivery_page.status_code == 200, "delivery list missing")
         expect("Delivery list" in delivery_page.text, "delivery heading missing")
 
+        db = SessionLocal()
+        try:
+            order = db.query(Order).order_by(Order.id).first()
+            expect(order is not None, "missing order for admin line edit")
+            order_id = order.id
+            item = order.items[0]
+            item_id = item.id
+            item_product_id = item.product_id
+            item_price = item.unit_price
+            baker = db.query(User).filter_by(username="baker_noa").one()
+            baker_id = baker.id
+            hebrew = db.query(User).filter_by(username="גיא_01").one()
+            hebrew_id = hebrew.id
+        finally:
+            db.close()
+
+        order_edit = client.get(f"/admin/orders/{order_id}?lang=en")
+        expect(order_edit.status_code == 200, "order edit page missing")
+        expect("Order lines" in order_edit.text, "order line editor missing")
+        from urllib.parse import urlencode
+
+        saved_order = client.post(
+            f"/admin/orders/{order_id}",
+            content=urlencode(
+                [
+                    ("lang", "en"),
+                    ("status", "PAID"),
+                    ("payment_method", "bit"),
+                    ("payment_other", ""),
+                    ("notes", "Admin adjusted"),
+                    ("item_id", str(item_id)),
+                    ("item_product_id", str(item_product_id)),
+                    ("item_quantity", "3"),
+                    ("item_unit_price", f"{item_price:.2f}"),
+                    ("new_product_id", str(product_id)),
+                    ("new_quantity", "1"),
+                    ("new_unit_price", ""),
+                ]
+            ),
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+            follow_redirects=False,
+        )
+        expect(saved_order.status_code == 303, "order line save failed")
+        db = SessionLocal()
+        try:
+            updated = db.query(Order).filter_by(id=order_id).one()
+            expect(updated.status.value == "PAID", "order status not updated")
+            expect(len(updated.items) == 2, "expected existing + new order line")
+            expect(sum(item.quantity for item in updated.items) == 4, "order quantities wrong")
+        finally:
+            db.close()
+
+        promote = client.post(
+            f"/admin/users/{baker_id}/role",
+            data={"lang": "en", "is_admin": "1"},
+            follow_redirects=False,
+        )
+        expect(promote.status_code == 303, "promote to admin failed")
+        db = SessionLocal()
+        try:
+            expect(db.query(User).filter_by(id=baker_id).one().is_admin is True, "baker was not promoted")
+        finally:
+            db.close()
+        demote = client.post(
+            f"/admin/users/{baker_id}/role",
+            data={"lang": "en"},
+            follow_redirects=False,
+        )
+        expect(demote.status_code == 303, "demote admin failed")
+
+        removed = client.post(
+            f"/admin/users/{hebrew_id}/delete",
+            data={"lang": "en"},
+            follow_redirects=False,
+        )
+        expect(removed.status_code == 303, "user delete failed")
+        db = SessionLocal()
+        try:
+            expect(db.query(User).filter_by(username="גיא_01").one_or_none() is None, "hebrew user still present")
+        finally:
+            db.close()
+
     print("order flow ok")
 
 

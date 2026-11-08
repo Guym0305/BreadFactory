@@ -11,6 +11,7 @@ from app.i18n import get_lang, resolve_lang, set_lang, t
 from app.models.bakery import OrderStatus, Product
 from app.security import assert_same_origin
 from app.services.admin import (
+    delete_user,
     delivery_dates,
     delivery_orders,
     get_admin_order,
@@ -20,6 +21,7 @@ from app.services.admin import (
     list_users,
     product_label,
     reset_user_password,
+    set_user_admin,
     update_order,
     update_product,
 )
@@ -339,6 +341,45 @@ def admin_orders_page(
     )
 
 
+def _parse_order_lines(form) -> list[dict]:
+    item_ids = [str(value) for value in form.getlist("item_id")]
+    product_ids = [str(value) for value in form.getlist("item_product_id")]
+    quantities = [str(value) for value in form.getlist("item_quantity")]
+    prices = [str(value) for value in form.getlist("item_unit_price")]
+    remove_ids = {str(value) for value in form.getlist("item_remove")}
+    if not (len(item_ids) == len(product_ids) == len(quantities) == len(prices)):
+        raise CheckoutError(t("admin_bad_line"))
+    lines: list[dict] = []
+    for item_id, product_id, quantity, price in zip(item_ids, product_ids, quantities, prices):
+        lines.append(
+            {
+                "id": int(item_id) if item_id.isdigit() else None,
+                "product_id": product_id,
+                "quantity": quantity,
+                "unit_price": price,
+                "remove": item_id in remove_ids,
+            }
+        )
+    new_product = str(form.get("new_product_id") or "").strip()
+    new_quantity = str(form.get("new_quantity") or "").strip()
+    new_price = str(form.get("new_unit_price") or "").strip()
+    if new_product:
+        try:
+            product_id = int(new_product)
+        except ValueError as exc:
+            raise CheckoutError(t("choose_from_bake")) from exc
+        lines.append(
+            {
+                "id": None,
+                "product_id": product_id,
+                "quantity": new_quantity or "1",
+                "unit_price": new_price,
+                "remove": False,
+            }
+        )
+    return lines
+
+
 @router.get("/admin/orders/{order_id}")
 def admin_order_edit_page(request: Request, order_id: int, db: Session = Depends(get_db)):
     resolve_lang(request)
@@ -355,6 +396,7 @@ def admin_order_edit_page(request: Request, order_id: int, db: Session = Depends
         {
             "current_user": user,
             "order": order,
+            "products": list_products(db),
             "statuses": list(OrderStatus),
             "error": None,
             "notice": request.query_params.get("saved") == "1",
@@ -375,6 +417,12 @@ async def admin_order_save(request: Request, order_id: int, db: Session = Depend
     _use_lang(request, str(form.get("lang") or ""))
     try:
         assert_same_origin(request)
+        lines = _parse_order_lines(form)
+        # Fill missing new line price from product catalog.
+        for row in lines:
+            if row.get("id") is None and not str(row.get("unit_price") or "").strip():
+                product = get_admin_product(db, int(row["product_id"]))
+                row["unit_price"] = str(product.price)
         update_order(
             db,
             order_id,
@@ -382,6 +430,7 @@ async def admin_order_save(request: Request, order_id: int, db: Session = Depend
             notes=str(form.get("notes") or ""),
             payment_method=str(form.get("payment_method") or ""),
             payment_other=str(form.get("payment_other") or ""),
+            lines=lines,
         )
     except CheckoutError as exc:
         order = get_admin_order(db, order_id)
@@ -391,6 +440,7 @@ async def admin_order_save(request: Request, order_id: int, db: Session = Depend
             {
                 "current_user": user,
                 "order": order,
+                "products": list_products(db),
                 "statuses": list(OrderStatus),
                 "error": str(exc),
                 "notice": False,
@@ -495,22 +545,40 @@ async def admin_product_save(request: Request, product_id: int, db: Session = De
     )
 
 
-@router.get("/admin/change-password")
-def admin_users_page(request: Request, db: Session = Depends(get_db)):
-    resolve_lang(request)
-    user, redirect = _require_admin(request, db)
-    if redirect is not None:
-        return redirect
+def _users_page(request: Request, user, db: Session, *, error=None, notice=None, notice_user=""):
     return render(
         request,
         "admin_users.html",
         {
             "current_user": user,
             "users": list_users(db),
-            "error": None,
-            "notice": request.query_params.get("saved") == "1",
-            "notice_user": request.query_params.get("user") or "",
+            "error": error,
+            "notice": notice,
+            "notice_user": notice_user,
         },
+        status_code=400 if error else 200,
+    )
+
+
+@router.get("/admin/change-password")
+def admin_users_page(request: Request, db: Session = Depends(get_db)):
+    resolve_lang(request)
+    user, redirect = _require_admin(request, db)
+    if redirect is not None:
+        return redirect
+    notice = None
+    if request.query_params.get("saved") == "1":
+        notice = "password"
+    elif request.query_params.get("role") == "1":
+        notice = "role"
+    elif request.query_params.get("deleted") == "1":
+        notice = "deleted"
+    return _users_page(
+        request,
+        user,
+        db,
+        notice=notice,
+        notice_user=request.query_params.get("user") or "",
     )
 
 
@@ -526,20 +594,52 @@ async def admin_user_password_save(request: Request, user_id: int, db: Session =
         assert_same_origin(request)
         target = reset_user_password(db, user_id, str(form.get("password") or ""))
     except CheckoutError as exc:
-        return render(
-            request,
-            "admin_users.html",
-            {
-                "current_user": user,
-                "users": list_users(db),
-                "error": str(exc),
-                "notice": False,
-                "notice_user": "",
-            },
-            status_code=400,
-        )
+        return _users_page(request, user, db, error=str(exc))
     return RedirectResponse(
         redirect_path(f"/admin/change-password?saved=1&user={quote(target.username)}"),
+        status_code=303,
+    )
+
+
+@router.post("/admin/users/{user_id}/role")
+async def admin_user_role_save(request: Request, user_id: int, db: Session = Depends(get_db)):
+    resolve_lang(request)
+    user, redirect = _require_admin(request, db)
+    if redirect is not None:
+        return redirect
+    form = await request.form()
+    _use_lang(request, str(form.get("lang") or ""))
+    try:
+        assert_same_origin(request)
+        target = set_user_admin(
+            db,
+            user_id,
+            make_admin=str(form.get("is_admin") or "") == "1",
+            actor=user,
+        )
+    except CheckoutError as exc:
+        return _users_page(request, user, db, error=str(exc))
+    return RedirectResponse(
+        redirect_path(f"/admin/change-password?role=1&user={quote(target.username)}"),
+        status_code=303,
+    )
+
+
+@router.post("/admin/users/{user_id}/delete")
+async def admin_user_delete(request: Request, user_id: int, db: Session = Depends(get_db)):
+    resolve_lang(request)
+    user, redirect = _require_admin(request, db)
+    if redirect is not None:
+        return redirect
+    form = await request.form()
+    _use_lang(request, str(form.get("lang") or ""))
+    try:
+        assert_same_origin(request)
+        username = delete_user(db, user_id, actor=user)
+    except CheckoutError as exc:
+        return _users_page(request, user, db, error=str(exc))
+    return RedirectResponse(
+        redirect_path(f"/admin/change-password?deleted=1&user={quote(username)}"),
         status_code=303,
     )
 

@@ -6,8 +6,12 @@
   <section class="shell confirm admin-desk">
     <p class="kicker">ניהול</p>
     <h1>לקוחות וסיסמאות</h1>
-    {% if notice %}
+    {% if notice == "password" %}
       <p class="banner banner-welcome" role="status">הסיסמה עודכנה{% if notice_user %} עבור {{ notice_user }}{% endif %}.</p>
+    {% elif notice == "role" %}
+      <p class="banner banner-welcome" role="status">הרשאת המנהל עודכנה{% if notice_user %} עבור {{ notice_user }}{% endif %}.</p>
+    {% elif notice == "deleted" %}
+      <p class="banner banner-welcome" role="status">המשתמש הוסר{% if notice_user %}: {{ notice_user }}{% endif %}.</p>
     {% endif %}
     {% if error %}
       <p class="banner banner-error" role="alert">{{ error }}</p>
@@ -28,8 +32,25 @@
               </label>
               <button class="pay-button" type="submit">איפוס סיסמה</button>
             </form>
+            <form class="admin-form admin-form-inline" method="post" action="/admin/users/{{ account.id }}/role">
+              <input type="hidden" name="lang" value="he">
+              <label class="admin-check">
+                <input type="checkbox" name="is_admin" value="1" {% if account.is_admin %}checked{% endif %} {% if account.id == current_user.id and account.is_admin %}disabled{% endif %}>
+                <span>הרשאת מנהל</span>
+              </label>
+              {% if account.id == current_user.id and account.is_admin %}
+                <input type="hidden" name="is_admin" value="1">
+              {% endif %}
+              <button class="guest-button" type="submit">שמירת הרשאה</button>
+            </form>
           {% else %}
-            <p class="admin-muted">לחשבונות אורח אין סיסמה.</p>
+            <p class="admin-muted">לחשבונות אורח אין סיסמה ואי אפשר להפוך אותם למנהלים.</p>
+          {% endif %}
+          {% if account.id != current_user.id %}
+            <form class="admin-form admin-form-inline" method="post" action="/admin/users/{{ account.id }}/delete" onsubmit="return confirm('להסיר את {{ account.username }}?');">
+              <input type="hidden" name="lang" value="he">
+              <button class="admin-danger" type="submit">הסרת משתמש</button>
+            </form>
           {% endif %}
         </article>
       {% else %}

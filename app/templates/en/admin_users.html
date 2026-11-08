@@ -6,8 +6,12 @@
   <section class="shell confirm admin-desk">
     <p class="kicker">Admin</p>
     <h1>Customers &amp; passwords</h1>
-    {% if notice %}
+    {% if notice == "password" %}
       <p class="banner banner-welcome" role="status">Password updated{% if notice_user %} for {{ notice_user }}{% endif %}.</p>
+    {% elif notice == "role" %}
+      <p class="banner banner-welcome" role="status">Admin access updated{% if notice_user %} for {{ notice_user }}{% endif %}.</p>
+    {% elif notice == "deleted" %}
+      <p class="banner banner-welcome" role="status">User removed{% if notice_user %}: {{ notice_user }}{% endif %}.</p>
     {% endif %}
     {% if error %}
       <p class="banner banner-error" role="alert">{{ error }}</p>
@@ -28,8 +32,25 @@
               </label>
               <button class="pay-button" type="submit">Reset password</button>
             </form>
+            <form class="admin-form admin-form-inline" method="post" action="/admin/users/{{ account.id }}/role">
+              <input type="hidden" name="lang" value="en">
+              <label class="admin-check">
+                <input type="checkbox" name="is_admin" value="1" {% if account.is_admin %}checked{% endif %} {% if account.id == current_user.id and account.is_admin %}disabled{% endif %}>
+                <span>Admin access</span>
+              </label>
+              {% if account.id == current_user.id and account.is_admin %}
+                <input type="hidden" name="is_admin" value="1">
+              {% endif %}
+              <button class="guest-button" type="submit">Save role</button>
+            </form>
           {% else %}
-            <p class="admin-muted">Guest accounts have no password.</p>
+            <p class="admin-muted">Guest accounts have no password and cannot be admins.</p>
+          {% endif %}
+          {% if account.id != current_user.id %}
+            <form class="admin-form admin-form-inline" method="post" action="/admin/users/{{ account.id }}/delete" onsubmit="return confirm('Remove {{ account.username }}?');">
+              <input type="hidden" name="lang" value="en">
+              <button class="admin-danger" type="submit">Remove user</button>
+            </form>
           {% endif %}
         </article>
       {% else %}

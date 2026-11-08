@@ -55,6 +55,13 @@ MESSAGES = {
         "admin_bad_hours": "Enter valid fermentation hours.",
         "admin_user_missing": "User not found.",
         "admin_guest_password": "Guest accounts do not use a password.",
+        "admin_guest_admin": "Guest accounts cannot be admins.",
+        "admin_cannot_demote_self": "You cannot remove your own admin access.",
+        "admin_cannot_delete_self": "You cannot delete your own account.",
+        "admin_last_admin": "Keep at least one admin account.",
+        "admin_bad_line": "That order line could not be updated.",
+        "admin_user_deleted": "User removed.",
+        "admin_role_saved": "Admin access updated.",
     },
     "he": {
         "enter_name": "הזינו שם.",
@@ -103,6 +110,13 @@ MESSAGES = {
         "admin_bad_hours": "הזינו שעות תסיסה תקינות.",
         "admin_user_missing": "המשתמש לא נמצא.",
         "admin_guest_password": "לחשבונות אורח אין סיסמה.",
+        "admin_guest_admin": "אי אפשר להפוך אורח למנהל.",
+        "admin_cannot_demote_self": "אי אפשר להסיר מעצמכם הרשאת מנהל.",
+        "admin_cannot_delete_self": "אי אפשר למחוק את החשבון שלכם.",
+        "admin_last_admin": "חייבים להשאיר לפחות מנהל אחד.",
+        "admin_bad_line": "לא הצלחנו לעדכן את שורת ההזמנה.",
+        "admin_user_deleted": "המשתמש הוסר.",
+        "admin_role_saved": "הרשאת המנהל עודכנה.",
     },
 }
 
