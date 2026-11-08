@@ -5,6 +5,7 @@
   --color-olive: #3e4a34;
   --color-olive-deep: #2f3828;
   --color-clay: #c4b8a5;
+  --color-error: #b42318;
   --font-serif: "Playfair Display", Georgia, "Times New Roman", serif;
   --font-sans: Inter, Roboto, "Helvetica Neue", Arial, sans-serif;
   color-scheme: light;
@@ -310,6 +311,12 @@ h1.brand-display {
   border-top: 1px solid var(--color-gold);
   border-bottom: 1px solid var(--color-gold);
   margin-bottom: 1.25rem;
+}
+
+.banner-error {
+  border-color: var(--color-error);
+  color: var(--color-error);
+  font-weight: 600;
 }
 
 .banner-welcome {
@@ -746,6 +753,103 @@ a:focus-visible {
 .admin-action:hover {
   border-color: var(--color-olive);
   background: rgba(62, 74, 52, 0.08);
+}
+
+.admin-filter,
+.admin-form {
+  display: grid;
+  gap: 0.85rem;
+  max-width: 36rem;
+  margin: 1.25rem 0 1.5rem;
+}
+
+.admin-form-inline {
+  margin-top: 0.85rem;
+}
+
+.admin-filter label,
+.admin-form label {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.admin-check {
+  display: flex !important;
+  align-items: center;
+  gap: 0.55rem;
+  grid-template-columns: none;
+}
+
+.admin-check input {
+  width: auto;
+}
+
+.admin-table-wrap {
+  overflow-x: auto;
+  margin: 1rem 0 1.5rem;
+}
+
+.admin-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.95rem;
+}
+
+.admin-table th,
+.admin-table td {
+  text-align: start;
+  padding: 0.65rem 0.5rem;
+  border-bottom: 1px solid var(--color-clay);
+  vertical-align: top;
+}
+
+.admin-meta {
+  display: grid;
+  gap: 0.65rem;
+  margin: 1rem 0;
+}
+
+.admin-meta div {
+  display: grid;
+  gap: 0.15rem;
+}
+
+.admin-meta dt {
+  font-size: 0.85rem;
+  color: var(--color-olive);
+}
+
+.admin-meta dd {
+  margin: 0;
+}
+
+.admin-lines {
+  margin: 0 0 1.25rem;
+  padding-inline-start: 1.1rem;
+}
+
+.admin-user-list,
+.admin-delivery-list {
+  display: grid;
+  gap: 1rem;
+  margin: 1.25rem 0 1.5rem;
+}
+
+.admin-user-card,
+.admin-delivery-card {
+  border: 1px solid var(--color-clay);
+  padding: 1rem;
+}
+
+.admin-user-card h2,
+.admin-delivery-card h2 {
+  margin: 0 0 0.35rem;
+  font-size: 1.2rem;
+}
+
+.admin-muted {
+  color: var(--color-olive);
+  font-size: 0.95rem;
 }
 
 @media (max-width: 720px) {

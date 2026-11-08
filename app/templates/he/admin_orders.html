@@ -1,0 +1,54 @@
+{% extends "he/base.html" %}
+{% block title %}הזמנות · ניהול · לחם בהר{% endblock %}
+{% block body_class %}is-admin{% endblock %}
+
+{% block content %}
+  <section class="shell confirm admin-desk">
+    <p class="kicker">ניהול</p>
+    <h1>הזמנות</h1>
+    {% if notice %}
+      <p class="banner banner-welcome" role="status">נשמר.</p>
+    {% endif %}
+    <form class="admin-filter" method="get" action="/admin/orders">
+      <input type="hidden" name="lang" value="he">
+      <label>
+        <span>תאריך משלוח</span>
+        <select name="date" onchange="this.form.submit()">
+          <option value="">כל האחרונות</option>
+          {% for day in dates %}
+            <option value="{{ day.isoformat() }}" {% if selected_date == day.isoformat() %}selected{% endif %}>{{ day.isoformat() }}</option>
+          {% endfor %}
+        </select>
+      </label>
+    </form>
+    <div class="admin-table-wrap">
+      <table class="admin-table">
+        <thead>
+          <tr>
+            <th>הזמנה</th>
+            <th>משלוח</th>
+            <th>לקוח</th>
+            <th>סטטוס</th>
+            <th>סה״כ</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for order in orders %}
+            <tr>
+              <td>{{ order.order_number }}</td>
+              <td>{{ order.delivery_date.date().isoformat() }}</td>
+              <td>{{ order.customer.full_name if order.customer else "—" }}</td>
+              <td>{{ status_value(order) }}</td>
+              <td>₪{{ '%.2f'|format(order.total_amount) }}</td>
+              <td><a href="/admin/orders/{{ order.id }}?lang=he">עריכה</a></td>
+            </tr>
+          {% else %}
+            <tr><td colspan="6">אין הזמנות עדיין.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <p><a class="pay-button" href="/admin?lang=he">חזרה לניהול</a></p>
+  </section>
+{% endblock %}

@@ -9,11 +9,12 @@
     {% if welcome_message %}
       <p class="banner banner-welcome" role="status">{{ welcome_message }}</p>
     {% endif %}
-    <p class="lede">Signed in as {{ current_user.username }}. Choose an admin action.</p>
+    <p class="lede">Signed in as {{ current_user.username }}. View and edit bakery data.</p>
     <nav class="admin-actions" aria-label="Admin actions">
-      <a class="admin-action" href="/admin/change-password?lang=en">Change user password</a>
-      <a class="admin-action" href="/admin/update-content?lang=en">Update bakery content</a>
-      <a class="admin-action" href="/admin/delivery-list?lang=en">Generate delivery list</a>
+      <a class="admin-action" href="/admin/orders?lang=en">Orders</a>
+      <a class="admin-action" href="/admin/update-content?lang=en">Products &amp; bakery content</a>
+      <a class="admin-action" href="/admin/change-password?lang=en">Customers &amp; passwords</a>
+      <a class="admin-action" href="/admin/delivery-list?lang=en">Delivery list</a>
     </nav>
   </section>
 {% endblock %}

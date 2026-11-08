@@ -10,6 +10,19 @@ from app.database import get_db
 from app.i18n import get_lang, resolve_lang, set_lang, t
 from app.models.bakery import OrderStatus, Product
 from app.security import assert_same_origin
+from app.services.admin import (
+    delivery_dates,
+    delivery_orders,
+    get_admin_order,
+    get_admin_product,
+    list_orders,
+    list_products,
+    list_users,
+    product_label,
+    reset_user_password,
+    update_order,
+    update_product,
+)
 from app.services.auth import (
     authenticate_user,
     clear_session,
@@ -25,7 +38,7 @@ from app.services.checkout import checkout_from_form, create_checkout
 from app.services.errors import CheckoutError
 from app.services.orders import get_order
 from app.services.payments import apply_webhook
-from app.services.slots import list_slots, week_choice_for
+from app.services.slots import cycle_for, list_slots, week_choice_for
 from app.templating import redirect_path, render
 
 router = APIRouter(tags=["pages"])
@@ -102,18 +115,6 @@ def _require_admin(request: Request, db: Session):
     if not user.is_admin:
         raise HTTPException(status_code=403, detail=t("admin_only"))
     return user, None
-
-
-def _render_admin_placeholder(request: Request, user, *, title: str, lede: str):
-    return render(
-        request,
-        "admin_placeholder.html",
-        {
-            "current_user": user,
-            "page_title": title,
-            "page_lede": lede,
-        },
-    )
 
 
 def _render_home(
@@ -310,66 +311,262 @@ def admin_page(request: Request, db: Session = Depends(get_db)):
     )
 
 
-@router.get("/admin/change-password")
-def admin_change_password(request: Request, db: Session = Depends(get_db)):
+@router.get("/admin/orders")
+def admin_orders_page(
+    request: Request,
+    db: Session = Depends(get_db),
+    delivery_date: str | None = Query(default=None, alias="date"),
+):
     resolve_lang(request)
     user, redirect = _require_admin(request, db)
     if redirect is not None:
         return redirect
-    if get_lang() == "he":
-        return _render_admin_placeholder(
-            request,
-            user,
-            title="שינוי סיסמת משתמש",
-            lede="המסך הזה יתווסף בהמשך. כרגע אין כאן פעולה.",
-        )
-    return _render_admin_placeholder(
+    selected = _parse_date(delivery_date)
+    orders = list_orders(db, delivery=selected)
+    return render(
         request,
-        user,
-        title="Change user password",
-        lede="This screen will be added later. Nothing happens here yet.",
+        "admin_orders.html",
+        {
+            "current_user": user,
+            "orders": orders,
+            "selected_date": selected.isoformat() if selected else "",
+            "dates": delivery_dates(db),
+            "notice": request.query_params.get("saved") == "1",
+            "error": None,
+            "product_label": product_label,
+            "status_value": _status_value,
+        },
+    )
+
+
+@router.get("/admin/orders/{order_id}")
+def admin_order_edit_page(request: Request, order_id: int, db: Session = Depends(get_db)):
+    resolve_lang(request)
+    user, redirect = _require_admin(request, db)
+    if redirect is not None:
+        return redirect
+    try:
+        order = get_admin_order(db, order_id)
+    except CheckoutError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
+    return render(
+        request,
+        "admin_order_edit.html",
+        {
+            "current_user": user,
+            "order": order,
+            "statuses": list(OrderStatus),
+            "error": None,
+            "notice": request.query_params.get("saved") == "1",
+            "product_label": product_label,
+            "status_value": _status_value,
+            "saved": {},
+        },
+    )
+
+
+@router.post("/admin/orders/{order_id}")
+async def admin_order_save(request: Request, order_id: int, db: Session = Depends(get_db)):
+    resolve_lang(request)
+    user, redirect = _require_admin(request, db)
+    if redirect is not None:
+        return redirect
+    form = await request.form()
+    _use_lang(request, str(form.get("lang") or ""))
+    try:
+        assert_same_origin(request)
+        update_order(
+            db,
+            order_id,
+            status=str(form.get("status") or ""),
+            notes=str(form.get("notes") or ""),
+            payment_method=str(form.get("payment_method") or ""),
+            payment_other=str(form.get("payment_other") or ""),
+        )
+    except CheckoutError as exc:
+        order = get_admin_order(db, order_id)
+        return render(
+            request,
+            "admin_order_edit.html",
+            {
+                "current_user": user,
+                "order": order,
+                "statuses": list(OrderStatus),
+                "error": str(exc),
+                "notice": False,
+                "product_label": product_label,
+                "status_value": _status_value,
+                "saved": {
+                    "status": str(form.get("status") or ""),
+                    "notes": str(form.get("notes") or ""),
+                    "payment_method": str(form.get("payment_method") or ""),
+                    "payment_other": str(form.get("payment_other") or ""),
+                },
+            },
+            status_code=exc.status_code if exc.status_code < 500 else 400,
+        )
+    return RedirectResponse(
+        redirect_path(f"/admin/orders/{order_id}?saved=1"),
+        status_code=303,
     )
 
 
 @router.get("/admin/update-content")
-def admin_update_content(request: Request, db: Session = Depends(get_db)):
+def admin_products_page(request: Request, db: Session = Depends(get_db)):
     resolve_lang(request)
     user, redirect = _require_admin(request, db)
     if redirect is not None:
         return redirect
-    if get_lang() == "he":
-        return _render_admin_placeholder(
-            request,
-            user,
-            title="עדכון תוכן המאפייה",
-            lede="המסך הזה יתווסף בהמשך. כרגע אין כאן פעולה.",
-        )
-    return _render_admin_placeholder(
+    return render(
         request,
-        user,
-        title="Update bakery content",
-        lede="This screen will be added later. Nothing happens here yet.",
+        "admin_products.html",
+        {
+            "current_user": user,
+            "products": list_products(db),
+            "product_label": product_label,
+            "notice": request.query_params.get("saved") == "1",
+        },
+    )
+
+
+@router.get("/admin/products/{product_id}")
+def admin_product_edit_page(request: Request, product_id: int, db: Session = Depends(get_db)):
+    resolve_lang(request)
+    user, redirect = _require_admin(request, db)
+    if redirect is not None:
+        return redirect
+    try:
+        product = get_admin_product(db, product_id)
+    except CheckoutError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
+    return render(
+        request,
+        "admin_product_edit.html",
+        {
+            "current_user": user,
+            "product": product,
+            "error": None,
+            "notice": request.query_params.get("saved") == "1",
+            "saved": {},
+        },
+    )
+
+
+@router.post("/admin/products/{product_id}")
+async def admin_product_save(request: Request, product_id: int, db: Session = Depends(get_db)):
+    resolve_lang(request)
+    user, redirect = _require_admin(request, db)
+    if redirect is not None:
+        return redirect
+    form = await request.form()
+    _use_lang(request, str(form.get("lang") or ""))
+    saved = {
+        "name_en": str(form.get("name_en") or ""),
+        "name_he": str(form.get("name_he") or ""),
+        "description_en": str(form.get("description_en") or ""),
+        "description_he": str(form.get("description_he") or ""),
+        "ingredients_en": str(form.get("ingredients_en") or ""),
+        "ingredients_he": str(form.get("ingredients_he") or ""),
+        "price": str(form.get("price") or ""),
+        "fermentation_hours": str(form.get("fermentation_hours") or ""),
+        "image_url": str(form.get("image_url") or ""),
+        "is_active": str(form.get("is_active") or "") == "1",
+    }
+    try:
+        assert_same_origin(request)
+        update_product(db, product_id, **saved)
+    except CheckoutError as exc:
+        product = get_admin_product(db, product_id)
+        return render(
+            request,
+            "admin_product_edit.html",
+            {
+                "current_user": user,
+                "product": product,
+                "error": str(exc),
+                "notice": False,
+                "saved": saved,
+            },
+            status_code=400,
+        )
+    return RedirectResponse(
+        redirect_path(f"/admin/products/{product_id}?saved=1"),
+        status_code=303,
+    )
+
+
+@router.get("/admin/change-password")
+def admin_users_page(request: Request, db: Session = Depends(get_db)):
+    resolve_lang(request)
+    user, redirect = _require_admin(request, db)
+    if redirect is not None:
+        return redirect
+    return render(
+        request,
+        "admin_users.html",
+        {
+            "current_user": user,
+            "users": list_users(db),
+            "error": None,
+            "notice": request.query_params.get("saved") == "1",
+            "notice_user": request.query_params.get("user") or "",
+        },
+    )
+
+
+@router.post("/admin/users/{user_id}/password")
+async def admin_user_password_save(request: Request, user_id: int, db: Session = Depends(get_db)):
+    resolve_lang(request)
+    user, redirect = _require_admin(request, db)
+    if redirect is not None:
+        return redirect
+    form = await request.form()
+    _use_lang(request, str(form.get("lang") or ""))
+    try:
+        assert_same_origin(request)
+        target = reset_user_password(db, user_id, str(form.get("password") or ""))
+    except CheckoutError as exc:
+        return render(
+            request,
+            "admin_users.html",
+            {
+                "current_user": user,
+                "users": list_users(db),
+                "error": str(exc),
+                "notice": False,
+                "notice_user": "",
+            },
+            status_code=400,
+        )
+    return RedirectResponse(
+        redirect_path(f"/admin/change-password?saved=1&user={quote(target.username)}"),
+        status_code=303,
     )
 
 
 @router.get("/admin/delivery-list")
-def admin_delivery_list(request: Request, db: Session = Depends(get_db)):
+def admin_delivery_list(
+    request: Request,
+    db: Session = Depends(get_db),
+    delivery_date: str | None = Query(default=None, alias="date"),
+):
     resolve_lang(request)
     user, redirect = _require_admin(request, db)
     if redirect is not None:
         return redirect
-    if get_lang() == "he":
-        return _render_admin_placeholder(
-            request,
-            user,
-            title="הפקת רשימת משלוחים",
-            lede="המסך הזה יתווסף בהמשך. כרגע אין כאן פעולה.",
-        )
-    return _render_admin_placeholder(
+    selected = _parse_date(delivery_date) or cycle_for("coming")[1]
+    orders = delivery_orders(db, selected)
+    return render(
         request,
-        user,
-        title="Generate delivery list",
-        lede="This screen will be added later. Nothing happens here yet.",
+        "admin_delivery.html",
+        {
+            "current_user": user,
+            "orders": orders,
+            "selected_date": selected,
+            "dates": delivery_dates(db),
+            "product_label": product_label,
+            "status_value": _status_value,
+        },
     )
 
 

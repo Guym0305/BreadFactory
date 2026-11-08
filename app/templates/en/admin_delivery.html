@@ -1,0 +1,48 @@
+{% extends "en/base.html" %}
+{% block title %}Delivery list · Admin · לחם בהר{% endblock %}
+{% block body_class %}is-admin{% endblock %}
+
+{% block content %}
+  <section class="shell confirm admin-desk">
+    <p class="kicker">Admin</p>
+    <h1>Delivery list</h1>
+    <form class="admin-filter" method="get" action="/admin/delivery-list">
+      <input type="hidden" name="lang" value="en">
+      <label>
+        <span>Delivery date</span>
+        <select name="date" onchange="this.form.submit()">
+          {% for day in dates %}
+            <option value="{{ day.isoformat() }}" {% if selected_date == day %}selected{% endif %}>{{ day.isoformat() }}</option>
+          {% endfor %}
+        </select>
+      </label>
+    </form>
+    <p class="lede">{{ selected_date.isoformat() }} · {{ orders|length }} order{% if orders|length != 1 %}s{% endif %}</p>
+    <div class="admin-delivery-list">
+      {% for order in orders %}
+        <article class="admin-delivery-card">
+          <h2>{{ order.customer.full_name if order.customer else "—" }}</h2>
+          <p>{{ order.order_number }} · {{ status_value(order) }}</p>
+          <p>{{ order.customer.phone if order.customer else "—" }}</p>
+          <p>{{ order.customer.address if order.customer else "—" }}</p>
+          <ul>
+            {% for item in order.items %}
+              <li>{{ item.quantity }} × {{ product_label(item.product, lang) }}</li>
+            {% endfor %}
+          </ul>
+          <p class="admin-muted">
+            {% if order.payment_method == 'other' and order.payment_other %}
+              Pay: {{ order.payment_other }}
+            {% elif order.payment_method %}
+              Pay: {{ order.payment_method }}
+            {% endif %}
+            {% if order.notes %} · Note: {{ order.notes }}{% endif %}
+          </p>
+        </article>
+      {% else %}
+        <p>No orders for this delivery date.</p>
+      {% endfor %}
+    </div>
+    <p><a class="pay-button" href="/admin?lang=en">Back to admin</a></p>
+  </section>
+{% endblock %}

@@ -1,0 +1,41 @@
+{% extends "en/base.html" %}
+{% block title %}Customers · Admin · לחם בהר{% endblock %}
+{% block body_class %}is-admin{% endblock %}
+
+{% block content %}
+  <section class="shell confirm admin-desk">
+    <p class="kicker">Admin</p>
+    <h1>Customers &amp; passwords</h1>
+    {% if notice %}
+      <p class="banner banner-welcome" role="status">Password updated{% if notice_user %} for {{ notice_user }}{% endif %}.</p>
+    {% endif %}
+    {% if error %}
+      <p class="banner banner-error" role="alert">{{ error }}</p>
+    {% endif %}
+    <div class="admin-user-list">
+      {% for account in users %}
+        <article class="admin-user-card">
+          <h2>{{ account.username }}{% if account.is_admin %} · admin{% endif %}{% if account.is_guest %} · guest{% endif %}</h2>
+          <p>{{ account.customer.full_name if account.customer else "—" }}</p>
+          <p>{{ account.customer.phone if account.customer else "—" }} · {{ account.customer.email if account.customer else "—" }}</p>
+          <p class="admin-muted">{{ account.customer.address if account.customer else "—" }}</p>
+          {% if not account.is_guest %}
+            <form class="admin-form admin-form-inline" method="post" action="/admin/users/{{ account.id }}/password">
+              <input type="hidden" name="lang" value="en">
+              <label>
+                <span>New password</span>
+                <input name="password" type="password" required minlength="6" maxlength="100" autocomplete="new-password">
+              </label>
+              <button class="pay-button" type="submit">Reset password</button>
+            </form>
+          {% else %}
+            <p class="admin-muted">Guest accounts have no password.</p>
+          {% endif %}
+        </article>
+      {% else %}
+        <p>No users yet.</p>
+      {% endfor %}
+    </div>
+    <p><a class="pay-button" href="/admin?lang=en">Back to admin</a></p>
+  </section>
+{% endblock %}

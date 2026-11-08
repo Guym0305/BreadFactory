@@ -16,7 +16,8 @@ from app.services.errors import CheckoutError
 
 SESSION_COOKIE = "bf_session"
 WELCOME_COOKIE = "bf_welcome"
-USERNAME_RE = re.compile(r"^[A-Za-z0-9_]{3,40}$")
+# Letters from any script (e.g. Hebrew), digits, underscore — 3–40 chars.
+USERNAME_RE = re.compile(r"^\w{3,40}$", re.UNICODE)
 PLACEHOLDER_EMAIL_SUFFIX = "@users.local"
 PLACEHOLDER_ADDRESS = "-"
 

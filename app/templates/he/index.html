@@ -21,7 +21,7 @@
       <p class="banner banner-welcome" role="status">{{ welcome_message }}</p>
     {% endif %}
     {% if error %}
-      <p class="banner" role="alert">{{ error }}</p>
+      <p class="banner banner-error" role="alert">{{ error }}</p>
     {% endif %}
     {% if slots %}
       {% set item = slots[0] %}

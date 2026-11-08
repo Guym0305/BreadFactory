@@ -1,0 +1,48 @@
+{% extends "he/base.html" %}
+{% block title %}רשימת משלוחים · ניהול · לחם בהר{% endblock %}
+{% block body_class %}is-admin{% endblock %}
+
+{% block content %}
+  <section class="shell confirm admin-desk">
+    <p class="kicker">ניהול</p>
+    <h1>רשימת משלוחים</h1>
+    <form class="admin-filter" method="get" action="/admin/delivery-list">
+      <input type="hidden" name="lang" value="he">
+      <label>
+        <span>תאריך משלוח</span>
+        <select name="date" onchange="this.form.submit()">
+          {% for day in dates %}
+            <option value="{{ day.isoformat() }}" {% if selected_date == day %}selected{% endif %}>{{ day.isoformat() }}</option>
+          {% endfor %}
+        </select>
+      </label>
+    </form>
+    <p class="lede">{{ selected_date.isoformat() }} · {{ orders|length }} הזמנות</p>
+    <div class="admin-delivery-list">
+      {% for order in orders %}
+        <article class="admin-delivery-card">
+          <h2>{{ order.customer.full_name if order.customer else "—" }}</h2>
+          <p>{{ order.order_number }} · {{ status_value(order) }}</p>
+          <p>{{ order.customer.phone if order.customer else "—" }}</p>
+          <p>{{ order.customer.address if order.customer else "—" }}</p>
+          <ul>
+            {% for item in order.items %}
+              <li>{{ item.quantity }} × {{ product_label(item.product, lang) }}</li>
+            {% endfor %}
+          </ul>
+          <p class="admin-muted">
+            {% if order.payment_method == 'other' and order.payment_other %}
+              תשלום: {{ order.payment_other }}
+            {% elif order.payment_method %}
+              תשלום: {{ order.payment_method }}
+            {% endif %}
+            {% if order.notes %} · הערה: {{ order.notes }}{% endif %}
+          </p>
+        </article>
+      {% else %}
+        <p>אין הזמנות לתאריך המשלוח הזה.</p>
+      {% endfor %}
+    </div>
+    <p><a class="pay-button" href="/admin?lang=he">חזרה לניהול</a></p>
+  </section>
+{% endblock %}

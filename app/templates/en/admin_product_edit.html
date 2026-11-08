@@ -1,0 +1,62 @@
+{% extends "en/base.html" %}
+{% block title %}Edit product · Admin · לחם בהר{% endblock %}
+{% block body_class %}is-admin{% endblock %}
+
+{% block content %}
+  {% set form = saved if saved else {} %}
+  <section class="shell confirm admin-desk">
+    <p class="kicker">Admin</p>
+    <h1>Edit product</h1>
+    {% if notice %}
+      <p class="banner banner-welcome" role="status">Saved.</p>
+    {% endif %}
+    {% if error %}
+      <p class="banner banner-error" role="alert">{{ error }}</p>
+    {% endif %}
+    <form class="admin-form" method="post" action="/admin/products/{{ product.id }}">
+      <input type="hidden" name="lang" value="en">
+      <label>
+        <span>Name (English)</span>
+        <input name="name_en" maxlength="100" value="{{ form.get('name_en', product.name_en or product.name or '') }}">
+      </label>
+      <label>
+        <span>Name (Hebrew)</span>
+        <input name="name_he" maxlength="100" value="{{ form.get('name_he', product.name_he or '') }}">
+      </label>
+      <label>
+        <span>Description (English)</span>
+        <textarea name="description_en" rows="3">{{ form.get('description_en', product.description_en or product.description or '') }}</textarea>
+      </label>
+      <label>
+        <span>Description (Hebrew)</span>
+        <textarea name="description_he" rows="3">{{ form.get('description_he', product.description_he or '') }}</textarea>
+      </label>
+      <label>
+        <span>Ingredients (English)</span>
+        <textarea name="ingredients_en" rows="2">{{ form.get('ingredients_en', product.ingredients_en or product.ingredients or '') }}</textarea>
+      </label>
+      <label>
+        <span>Ingredients (Hebrew)</span>
+        <textarea name="ingredients_he" rows="2">{{ form.get('ingredients_he', product.ingredients_he or '') }}</textarea>
+      </label>
+      <label>
+        <span>Price (₪)</span>
+        <input name="price" required value="{{ form.get('price', '%.2f'|format(product.price)) }}">
+      </label>
+      <label>
+        <span>Fermentation hours</span>
+        <input name="fermentation_hours" value="{{ form.get('fermentation_hours', product.fermentation_hours or 0) }}">
+      </label>
+      <label>
+        <span>Image URL</span>
+        <input name="image_url" maxlength="255" value="{{ form.get('image_url', product.image_url or '') }}">
+      </label>
+      <label class="admin-check">
+        <input type="checkbox" name="is_active" value="1" {% if form.get('is_active', product.is_active) %}checked{% endif %}>
+        <span>Active on the storefront</span>
+      </label>
+      <button class="pay-button" type="submit">Save product</button>
+    </form>
+    <p><a class="guest-button" href="/admin/update-content?lang=en">Back to products</a></p>
+  </section>
+{% endblock %}

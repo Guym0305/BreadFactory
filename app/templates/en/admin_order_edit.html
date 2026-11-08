@@ -1,0 +1,62 @@
+{% extends "en/base.html" %}
+{% block title %}Edit order · Admin · לחם בהר{% endblock %}
+{% block body_class %}is-admin{% endblock %}
+
+{% block content %}
+  {% set form = saved if saved is defined and saved else {} %}
+  <section class="shell confirm admin-desk">
+    <p class="kicker">Admin</p>
+    <h1>{{ order.order_number }}</h1>
+    {% if notice %}
+      <p class="banner banner-welcome" role="status">Saved.</p>
+    {% endif %}
+    {% if error %}
+      <p class="banner banner-error" role="alert">{{ error }}</p>
+    {% endif %}
+    <dl class="admin-meta">
+      <div><dt>Customer</dt><dd>{{ order.customer.full_name if order.customer else "—" }}</dd></div>
+      <div><dt>Phone</dt><dd>{{ order.customer.phone if order.customer else "—" }}</dd></div>
+      <div><dt>Address</dt><dd>{{ order.customer.address if order.customer else "—" }}</dd></div>
+      <div><dt>Delivery</dt><dd>{{ order.delivery_date.date().isoformat() }}</dd></div>
+      <div><dt>Total</dt><dd>₪{{ '%.2f'|format(order.total_amount) }}</dd></div>
+    </dl>
+    <ul class="admin-lines">
+      {% for item in order.items %}
+        <li>{{ item.quantity }} × {{ product_label(item.product, lang) }} — ₪{{ '%.2f'|format(item.unit_price) }}</li>
+      {% endfor %}
+    </ul>
+    <form class="admin-form" method="post" action="/admin/orders/{{ order.id }}">
+      <input type="hidden" name="lang" value="en">
+      <label>
+        <span>Status</span>
+        <select name="status" required>
+          {% for status in statuses %}
+            <option value="{{ status.value }}" {% if (form.get('status') or status_value(order)) == status.value %}selected{% endif %}>{{ status.value }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>
+        <span>Payment method</span>
+        <select name="payment_method">
+          {% set method = form['payment_method'] if 'payment_method' in form else (order.payment_method or '') %}
+          <option value="" {% if not method %}selected{% endif %}>—</option>
+          <option value="bit" {% if method == 'bit' %}selected{% endif %}>Bit</option>
+          <option value="paybox" {% if method == 'paybox' %}selected{% endif %}>PayBox</option>
+          <option value="bank_transfer" {% if method == 'bank_transfer' %}selected{% endif %}>Bank transfer</option>
+          <option value="cash" {% if method == 'cash' %}selected{% endif %}>Cash</option>
+          <option value="other" {% if method == 'other' %}selected{% endif %}>Other</option>
+        </select>
+      </label>
+      <label>
+        <span>Other payment note</span>
+        <input name="payment_other" maxlength="120" value="{{ form.get('payment_other', order.payment_other or '') }}">
+      </label>
+      <label>
+        <span>Notes</span>
+        <textarea name="notes" rows="3" maxlength="1000">{{ form.get('notes', order.notes or '') }}</textarea>
+      </label>
+      <button class="pay-button" type="submit">Save order</button>
+    </form>
+    <p><a class="guest-button" href="/admin/orders?lang=en">Back to orders</a></p>
+  </section>
+{% endblock %}

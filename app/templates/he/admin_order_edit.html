@@ -1,0 +1,62 @@
+{% extends "he/base.html" %}
+{% block title %}עריכת הזמנה · ניהול · לחם בהר{% endblock %}
+{% block body_class %}is-admin{% endblock %}
+
+{% block content %}
+  {% set form = saved if saved is defined and saved else {} %}
+  <section class="shell confirm admin-desk">
+    <p class="kicker">ניהול</p>
+    <h1>{{ order.order_number }}</h1>
+    {% if notice %}
+      <p class="banner banner-welcome" role="status">נשמר.</p>
+    {% endif %}
+    {% if error %}
+      <p class="banner banner-error" role="alert">{{ error }}</p>
+    {% endif %}
+    <dl class="admin-meta">
+      <div><dt>לקוח</dt><dd>{{ order.customer.full_name if order.customer else "—" }}</dd></div>
+      <div><dt>טלפון</dt><dd>{{ order.customer.phone if order.customer else "—" }}</dd></div>
+      <div><dt>כתובת</dt><dd>{{ order.customer.address if order.customer else "—" }}</dd></div>
+      <div><dt>משלוח</dt><dd>{{ order.delivery_date.date().isoformat() }}</dd></div>
+      <div><dt>סה״כ</dt><dd>₪{{ '%.2f'|format(order.total_amount) }}</dd></div>
+    </dl>
+    <ul class="admin-lines">
+      {% for item in order.items %}
+        <li>{{ item.quantity }} × {{ product_label(item.product, lang) }} — ₪{{ '%.2f'|format(item.unit_price) }}</li>
+      {% endfor %}
+    </ul>
+    <form class="admin-form" method="post" action="/admin/orders/{{ order.id }}">
+      <input type="hidden" name="lang" value="he">
+      <label>
+        <span>סטטוס</span>
+        <select name="status" required>
+          {% for status in statuses %}
+            <option value="{{ status.value }}" {% if (form.get('status') or status_value(order)) == status.value %}selected{% endif %}>{{ status.value }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>
+        <span>אמצעי תשלום</span>
+        <select name="payment_method">
+          {% set method = form['payment_method'] if 'payment_method' in form else (order.payment_method or '') %}
+          <option value="" {% if not method %}selected{% endif %}>—</option>
+          <option value="bit" {% if method == 'bit' %}selected{% endif %}>Bit</option>
+          <option value="paybox" {% if method == 'paybox' %}selected{% endif %}>PayBox</option>
+          <option value="bank_transfer" {% if method == 'bank_transfer' %}selected{% endif %}>העברה בנקאית</option>
+          <option value="cash" {% if method == 'cash' %}selected{% endif %}>מזומן</option>
+          <option value="other" {% if method == 'other' %}selected{% endif %}>אחר</option>
+        </select>
+      </label>
+      <label>
+        <span>הערת תשלום אחר</span>
+        <input name="payment_other" maxlength="120" value="{{ form.get('payment_other', order.payment_other or '') }}">
+      </label>
+      <label>
+        <span>הערות</span>
+        <textarea name="notes" rows="3" maxlength="1000">{{ form.get('notes', order.notes or '') }}</textarea>
+      </label>
+      <button class="pay-button" type="submit">שמירת הזמנה</button>
+    </form>
+    <p><a class="guest-button" href="/admin/orders?lang=he">חזרה להזמנות</a></p>
+  </section>
+{% endblock %}

@@ -28,7 +28,7 @@ from fastapi.testclient import TestClient
 
 from app.database import SessionLocal
 from app.main import app
-from app.models.bakery import Order, User
+from app.models.bakery import Order, Product, User
 from app.services.errors import CheckoutError
 from app.services.payments import mask_card, verify_webhook_signature
 
@@ -298,6 +298,27 @@ def main() -> None:
         )
         expect(bad_login.status_code == 400, "bad password was accepted")
         expect("Wrong username or password." in bad_login.text, "login error message missing")
+        expect("banner-error" in bad_login.text, "login error should use error styling")
+
+        client.post("/logout", data={"lang": "he"}, follow_redirects=False)
+        hebrew_user = client.post(
+            "/register",
+            data={
+                "username": "גיא_01",
+                "password": "secret12",
+                "full_name": "גיא מ",
+                "phone": "0507777777",
+                "email": "guy.he@example.com",
+                "address": "1 Jaffa Street, Jerusalem",
+                "lang": "he",
+                "next": "/",
+            },
+            follow_redirects=False,
+        )
+        expect(hebrew_user.status_code == 303, "Hebrew username registration failed")
+        hebrew_home = client.get("/?lang=he")
+        expect("גיא_01" in hebrew_home.text, "Hebrew username missing from header")
+        client.post("/logout", data={"lang": "en"}, follow_redirects=False)
 
         good_login = client.post(
             "/login",
@@ -325,16 +346,77 @@ def main() -> None:
         admin_page = client.get("/admin?lang=en")
         expect(admin_page.status_code == 200, "admin page missing")
         expect("Bakery desk" in admin_page.text, "admin desk copy missing")
-        expect("Change user password" in admin_page.text, "password action missing")
-        expect("Update bakery content" in admin_page.text, "content action missing")
-        expect("Generate delivery list" in admin_page.text, "delivery action missing")
-        password_page = client.get("/admin/change-password?lang=en")
-        expect(password_page.status_code == 200, "password placeholder missing")
-        expect("Back to admin" in password_page.text, "password back link missing")
-        content_page = client.get("/admin/update-content?lang=en")
-        expect("Update bakery content" in content_page.text, "content placeholder missing")
+        expect("Orders" in admin_page.text, "orders action missing")
+        expect("Products" in admin_page.text, "products action missing")
+        expect("Customers" in admin_page.text, "customers action missing")
+        expect("Delivery list" in admin_page.text, "delivery action missing")
+
+        orders_page = client.get("/admin/orders?lang=en")
+        expect(orders_page.status_code == 200, "orders page missing")
+        expect("BAKE-" in orders_page.text, "expected seeded orders on admin list")
+
+        products_page = client.get("/admin/update-content?lang=en")
+        expect(products_page.status_code == 200, "products page missing")
+        expect("Edit" in products_page.text, "product edit link missing")
+        first_product = SessionLocal()
+        try:
+            product_id = first_product.query(Product).order_by(Product.id).first().id
+        finally:
+            first_product.close()
+        product_edit = client.get(f"/admin/products/{product_id}?lang=en")
+        expect(product_edit.status_code == 200, "product edit missing")
+        saved_product = client.post(
+            f"/admin/products/{product_id}",
+            data={
+                "lang": "en",
+                "name_en": "Admin Updated Loaf",
+                "name_he": "כיכר מעודכנת",
+                "description_en": "Updated by admin",
+                "description_he": "עודכן על ידי מנהל",
+                "ingredients_en": "flour water",
+                "ingredients_he": "קמח מים",
+                "price": "42.50",
+                "fermentation_hours": "30",
+                "image_url": "",
+                "is_active": "1",
+            },
+            follow_redirects=False,
+        )
+        expect(saved_product.status_code == 303, "product save failed")
+
+        users_page = client.get("/admin/change-password?lang=en")
+        expect(users_page.status_code == 200, "users page missing")
+        expect("baker_noa" in users_page.text, "registered user missing from admin list")
+        db = SessionLocal()
+        try:
+            baker = db.query(User).filter_by(username="baker_noa").one()
+            baker_id = baker.id
+        finally:
+            db.close()
+        reset = client.post(
+            f"/admin/users/{baker_id}/password",
+            data={"lang": "en", "password": "newpass99"},
+            follow_redirects=False,
+        )
+        expect(reset.status_code == 303, "password reset failed")
+        client.post("/logout", data={"lang": "en"}, follow_redirects=False)
+        relogin = client.post(
+            "/login",
+            data={"username": "baker_noa", "password": "newpass99", "lang": "en", "next": "/"},
+            follow_redirects=False,
+        )
+        expect(relogin.status_code == 303, "login with reset password failed")
+        client.post("/logout", data={"lang": "en"}, follow_redirects=False)
+        admin_again = client.post(
+            "/login",
+            data={"username": "Admin", "password": "Admin", "lang": "en", "next": "/"},
+            follow_redirects=False,
+        )
+        expect(admin_again.status_code == 303, "admin re-login failed")
+
         delivery_page = client.get("/admin/delivery-list?lang=en")
-        expect("Generate delivery list" in delivery_page.text, "delivery placeholder missing")
+        expect(delivery_page.status_code == 200, "delivery list missing")
+        expect("Delivery list" in delivery_page.text, "delivery heading missing")
 
     print("order flow ok")
 
