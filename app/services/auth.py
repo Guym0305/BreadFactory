@@ -46,6 +46,10 @@ def verify_password(password: str, stored: str | None) -> bool:
     return hmac.compare_digest(check, digest)
 
 
+def _session_epoch() -> str:
+    return get_settings().effective_session_epoch
+
+
 def _sign(value: str) -> str:
     secret = get_settings().session_secret.encode("utf-8")
     signature = hmac.new(secret, value.encode("utf-8"), hashlib.sha256).hexdigest()
@@ -69,7 +73,7 @@ def _unsign(token: str) -> str | None:
 def set_session_user(response: Response, user_id: int) -> None:
     response.set_cookie(
         SESSION_COOKIE,
-        _sign(str(user_id)),
+        _sign(f"{_session_epoch()}:{user_id}"),
         max_age=60 * 60 * 24 * 30,
         httponly=True,
         samesite="lax",
@@ -108,17 +112,28 @@ def login_display_name(user: User) -> str:
     return user.username
 
 
-def current_user(request: Request, db: Session) -> User | None:
+def session_user_id(request: Request) -> int | None:
+    """Return the signed-in user id, or None if the cookie is missing/stale."""
     token = request.cookies.get(SESSION_COOKIE)
     if not token:
         return None
     raw = _unsign(token)
-    if raw is None or not raw.isdigit():
+    if raw is None:
+        return None
+    epoch, sep, user_part = raw.partition(":")
+    if sep != ":" or epoch != _session_epoch() or not user_part.isdigit():
+        return None
+    return int(user_part)
+
+
+def current_user(request: Request, db: Session) -> User | None:
+    user_id = session_user_id(request)
+    if user_id is None:
         return None
     return (
         db.query(User)
         .options(joinedload(User.customer))
-        .filter(User.id == int(raw))
+        .filter(User.id == user_id)
         .one_or_none()
     )
 

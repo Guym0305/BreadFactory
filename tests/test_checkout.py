@@ -94,6 +94,17 @@ def main() -> None:
         expect("Guest" in home.text, "guest account chip missing")
         expect("Payment by Grow" not in home.text, "Grow payment copy should be gone")
 
+        from app.config import get_settings
+
+        os.environ["SESSION_EPOCH"] = "test-revision-after-deploy"
+        get_settings.cache_clear()
+        after_deploy = client.get("/?lang=en", follow_redirects=False)
+        expect(after_deploy.status_code == 303, "new deploy should clear the prior session")
+        expect("/login" in after_deploy.headers["location"], after_deploy.headers["location"])
+        os.environ.pop("SESSION_EPOCH", None)
+        get_settings.cache_clear()
+        become_guest(client)
+
         hebrew_home = client.get("/?lang=he")
         expect("מועד אחרון להזמנה" in hebrew_home.text, "hebrew home is missing the order deadline")
         expect("המשלוח הבא" in hebrew_home.text, "hebrew home is missing the delivery label")

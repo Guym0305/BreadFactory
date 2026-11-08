@@ -1,3 +1,4 @@
+import os
 from functools import lru_cache
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -13,6 +14,8 @@ class Settings(BaseSettings):
     slot_capacity: int = 20
     payment_hold_minutes: int = 30
     session_secret: str = "dev-bread-factory-session-change-me"
+    # Empty = use Cloud Run K_REVISION (new deploy logs everyone out) or "local".
+    session_epoch: str = ""
     admin_username: str = "Admin"
     admin_password: str = "Admin"
     grow_api_key: str = ""
@@ -26,6 +29,13 @@ class Settings(BaseSettings):
     @property
     def grow_enabled(self) -> bool:
         return bool(self.grow_api_key.strip())
+
+    @property
+    def effective_session_epoch(self) -> str:
+        explicit = self.session_epoch.strip()
+        if explicit:
+            return explicit
+        return (os.environ.get("K_REVISION") or "local").strip() or "local"
 
 
 @lru_cache

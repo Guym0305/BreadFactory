@@ -10,6 +10,7 @@ from app.api import orders, payments, products
 from app.database import SessionLocal
 from app.migrate import run_migrations
 from app.seed import seed_products
+from app.services.auth import SESSION_COOKIE, session_user_id
 from app.web import router as pages
 
 logging.basicConfig(level=logging.INFO)
@@ -48,6 +49,9 @@ async def security_headers(request, call_next):
     response.headers["Content-Security-Policy"] = "frame-ancestors 'self'"
     if "text/html" in response.headers.get("content-type", ""):
         response.headers["Cache-Control"] = "no-store"
+    # Drop cookies from a previous Cloud Run revision so users land on login.
+    if request.cookies.get(SESSION_COOKIE) and session_user_id(request) is None:
+        response.delete_cookie(SESSION_COOKIE, path="/")
     return response
 
 
