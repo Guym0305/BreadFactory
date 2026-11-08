@@ -4,7 +4,11 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
+    # Local: sqlite:///./data/bakery.db
+    # Cloud SQL instance bread-factory-514112:me-west1:breadfactory (Cloud Run Unix socket):
+    # postgresql+psycopg://USER:PASSWORD@/bakery?host=/cloudsql/bread-factory-514112:me-west1:breadfactory
     database_url: str = "sqlite:///./data/bakery.db"
+    cloud_sql_instance: str = "bread-factory-514112:me-west1:breadfactory"
     public_base_url: str = "http://127.0.0.1:8000"
     slot_capacity: int = 20
     payment_hold_minutes: int = 30

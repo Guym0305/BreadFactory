@@ -8,7 +8,7 @@ Key constraints and design goals:
 
 - **Zero Payment PCI Footprint:** Never handle or store full credit card details.
 - **Cost Efficiency:** Zero fixed monthly infrastructure costs ($0 fixed cloud fee via Cloud Run, pay-per-transaction payment gateway via Grow).
-- **Simplicity:** Single SQLite database, Python FastAPI backend, server-rendered or clean SPA/lightweight frontend.
+- **Simplicity:** SQLite locally, Cloud SQL PostgreSQL in production; Python FastAPI backend, server-rendered or clean SPA/lightweight frontend.
 - **Developer-Friendly:** Fully containerized, optimized for Cursor IDE workflows, and auto-deployable to Google Cloud Run via GitHub.
 
 Repository: [https://github.com/Guym0305/BreadFactory.git](https://github.com/Guym0305/BreadFactory.git)
@@ -58,7 +58,7 @@ Load both from a single font stylesheet. Do not mix a third display face.
 | Component | Technology | Rationale |
 | :--- | :--- | :--- |
 | **Backend Framework** | Python 3.11 + FastAPI + Uvicorn/Gunicorn | Fast execution, native async handling, auto OpenAPI docs, lightweight. |
-| **Database** | SQLite 3 + SQLAlchemy ORM (WAL mode enabled) | Zero configuration, low memory footprint, ideal for low-to-medium write throughput. |
+| **Database** | SQLite locally; Cloud SQL PostgreSQL in production (SQLAlchemy ORM) | SQLite for local/tests; Postgres for durable Cloud Run data. |
 | **Migrations** | Alembic | Structured schema version control. |
 | **Payment Gateway** | Grow (by Meshulam/CardCom) Hosted Checkout / iFrame | $0/month fixed cost, PCI-DSS Level 1 compliant, Apple Pay/Bit support. |
 | **Invoicing (Optional)** | Morning (Green Invoice) API | Auto-generates tax receipts upon webhook confirmation. |
@@ -82,7 +82,7 @@ The canonical payment notify path is `POST /api/v1/payments/webhook`.
 │         PYTHON FASTAPI (CLOUD RUN)           │                   │
 │                                              │                   │
 │ - Validates Item Stock & Delivery Slot       │                   │
-│ - Creates Pending Order in SQLite DB         │                   │
+│ - Creates Pending Order in DB (SQLite/PG)    │                   │
 │ - Calls Grow API to Request Payment URL      │                   │
 └──────────────┬───────────────────────────────┘                   │
                │ 3. Returns Hosted Payment URL                     │
@@ -104,15 +104,15 @@ The canonical payment notify path is `POST /api/v1/payments/webhook`.
 │                                              │         │  (Generates Receipt)    │
 │ - Verifies Webhook Signature                 │         └─────────────────────────┘
 │ - Updates Order Status to "PAID"             │
-│ - Saves transaction_id to SQLite             │
+│ - Saves transaction_id to DB                 │
 └──────────────────────────────────────────────┘
 ```
 
 ---
 
-## 5. SQLite Database Schema & Models
+## 5. Database Schema & Models
 
-To run SQLite reliably on Cloud Run, WAL (Write-Ahead Logging) mode must be initialized on app startup.
+Local and tests use SQLite with WAL mode. Production uses Cloud SQL PostgreSQL via `DATABASE_URL`. SQLite-only pragmas and `BEGIN IMMEDIATE` apply only when the URL starts with `sqlite`.
 
 ### Entity Relationship Diagram
 
@@ -343,6 +343,7 @@ uvicorn[standard]==0.28.0
 gunicorn==21.2.0
 sqlalchemy==2.0.41
 alembic==1.13.1
+psycopg[binary]==3.2.9
 pydantic==2.11.7
 pydantic-settings==2.9.1
 httpx==0.27.0
@@ -351,7 +352,7 @@ jinja2==3.1.3
 tzdata==2024.1
 ```
 
-SQLite on Cloud Run is ephemeral unless the database file lives on a persistent volume. `DATABASE_URL=sqlite:////tmp/bakery.db` is acceptable only for a first deploy. Retaining orders across instance restarts requires a mounted volume (Cloud Storage FUSE or a Cloud Run volume) or a later move off SQLite.
+Local development uses SQLite. Production on Cloud Run should set `DATABASE_URL` to Cloud SQL PostgreSQL via the Cloud Run Cloud SQL connector (Unix socket). Instance: `bread-factory-514112:me-west1:breadfactory`. Example: `postgresql+psycopg://USER:PASSWORD@/bakery?host=/cloudsql/bread-factory-514112:me-west1:breadfactory`. SQLite under `/tmp` on Cloud Run remains ephemeral and is not recommended once orders must survive redeploys.
 
 ---
 
@@ -367,9 +368,9 @@ The repository root is this project. Internal layout:
 │
 ├── app/
 │   ├── __init__.py
-│   ├── main.py                   # FastAPI app entry point & SQLite WAL initialization
+│   ├── main.py                   # FastAPI app entry point & migrations on startup
 │   ├── config.py                 # Pydantic BaseSettings (Env variables)
-│   ├── database.py               # SQLAlchemy SessionLocal & engine init
+│   ├── database.py               # Dialect-aware SQLAlchemy engine (SQLite / Postgres)
 │   │
 │   ├── models/                   # SQLAlchemy ORM Models
 │   │   ├── __init__.py
@@ -422,19 +423,31 @@ git push -u origin main
 
 The local repository is already initialized and `origin` already points at that URL. Skip `git init` and `git remote add` if they already exist.
 
-2. Set up Cloud Run in Google Cloud Console:
+2. Cloud SQL (PostgreSQL) instance:
+   - Connection name: `bread-factory-514112:me-west1:breadfactory`
+   - Enable the **Cloud SQL Admin API** if needed.
+   - Create database `bakery` and a user/password on that instance.
+
+3. Set up Cloud Run in Google Cloud Console:
    - Go to Google Cloud Console → Cloud Run.
    - Click **Create Service**.
    - Select **Continuously deploy from a repository**.
    - Authorize GitHub and select repository `Guym0305/BreadFactory`.
    - Build type: Dockerfile (path `/Dockerfile`).
    - Service name: `bakery-service`.
-   - Region: `europe-west1` (Belgium) or `me-west1` (Tel Aviv).
+   - Region: prefer `me-west1` (same as Cloud SQL).
+   - Add a **Cloud SQL connection** to `bread-factory-514112:me-west1:breadfactory`.
+   - Grant the Cloud Run runtime service account `roles/cloudsql.client`.
    - Environment variables:
      - `GROW_API_KEY` = `<your-key>`
      - `GROW_PAGE_CODE` = `<your-code>`
-     - `DATABASE_URL` = `sqlite:////tmp/bakery.db` (or a persistent volume path if orders must survive restarts).
+     - `SESSION_SECRET` = `<strong-secret>`
+     - `DATABASE_URL` = `postgresql+psycopg://USER:PASSWORD@/bakery?host=/cloudsql/bread-factory-514112:me-west1:breadfactory`
    - Allow unauthenticated invocations (public access).
    - Click **Create**.
+
+No Cloud SQL Proxy binary is needed in the image when using the Cloud Run connector and Unix socket `host=`. On first boot, Alembic migrations create tables. Local `data/bakery.db` is not copied to Cloud SQL.
+
+**Persistence check after deploy:** register a user or place an order, redeploy, and confirm the data is still present.
 
 Do not commit Grow keys, Morning credentials, or `data/bakery.db`.

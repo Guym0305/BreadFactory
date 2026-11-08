@@ -11,8 +11,12 @@ Base = declarative_base()
 settings = get_settings()
 
 
+def _is_sqlite(url: str) -> bool:
+    return url.startswith("sqlite:")
+
+
 def _prepare_sqlite_path(url: str) -> None:
-    if not url.startswith("sqlite:///"):
+    if not _is_sqlite(url):
         return
     raw = url.removeprefix("sqlite:///")
     if raw in ("", ":memory:"):
@@ -23,13 +27,21 @@ def _prepare_sqlite_path(url: str) -> None:
 _prepare_sqlite_path(settings.database_url)
 
 connect_args: dict = {}
-if settings.database_url.startswith("sqlite"):
+engine_kwargs: dict = {
+    "pool_pre_ping": True,
+}
+if _is_sqlite(settings.database_url):
     connect_args["check_same_thread"] = False
+    engine_kwargs["poolclass"] = NullPool
+else:
+    # Cloud Run: small pool; connections are short-lived per request.
+    engine_kwargs["pool_size"] = 5
+    engine_kwargs["max_overflow"] = 5
 
 engine = create_engine(
     settings.database_url,
     connect_args=connect_args,
-    poolclass=NullPool,
+    **engine_kwargs,
 )
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
 
@@ -48,7 +60,7 @@ def _begin_immediate(connection) -> None:
     connection.exec_driver_sql("BEGIN IMMEDIATE")
 
 
-if settings.database_url.startswith("sqlite"):
+if _is_sqlite(settings.database_url):
     event.listen(engine, "connect", _enable_sqlite)
     event.listen(engine, "begin", _begin_immediate)
 
