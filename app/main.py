@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -14,14 +15,19 @@ from app.web import router as pages
 logging.basicConfig(level=logging.INFO)
 
 
-@asynccontextmanager
-async def lifespan(_app: FastAPI):
+def _startup() -> None:
     run_migrations()
     db = SessionLocal()
     try:
         seed_products(db)
     finally:
         db.close()
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    # Run sync DB setup off the event loop (avoids SQLite/Alembic deadlock under uvicorn).
+    await asyncio.to_thread(_startup)
     yield
 
 

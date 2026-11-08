@@ -15,9 +15,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Python requirements
+# Install Python requirements (fail the build if Postgres driver is missing)
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt \
+    && python -c "import psycopg; print('psycopg', psycopg.__version__)"
 
 # Copy application files
 COPY . .
