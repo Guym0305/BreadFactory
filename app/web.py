@@ -160,6 +160,18 @@ def _render_home(
     return render(request, "index.html", context, status_code=status_code)
 
 
+@router.get("/about")
+def about_page(request: Request, db: Session = Depends(get_db)):
+    resolve_lang(request)
+    return render(
+        request,
+        "about.html",
+        {
+            "current_user": current_user(request, db),
+        },
+    )
+
+
 @router.get("/login")
 def login_page(
     request: Request,

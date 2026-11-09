@@ -65,7 +65,7 @@
                 <h3>{{ product.name_en }}</h3>
                 <p class="price">{{ product.price|money }}</p>
                 <p>{{ product.description_en }}</p>
-                <p class="meta">{{ product.fermentation_hours }}-hour ferment · {{ product.ingredients_en }}</p>
+                <p class="meta">{% if product.fermentation_hours %}{{ product.fermentation_hours }}-hour ferment · {% endif %}{{ product.ingredients_en }}</p>
                 <div class="qty">
                   <button type="button" class="step" data-dir="-1" aria-label="Remove one {{ product.name_en }}">−</button>
                   <input class="qty-input" type="number" name="qty_{{ product.id }}" value="{{ saved.get('qty_' ~ product.id, '0') }}" min="0" max="{{ slot.remaining }}" inputmode="numeric" data-price="{{ product.price }}" aria-label="Quantity of {{ product.name_en }}">

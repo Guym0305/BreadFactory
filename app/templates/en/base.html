@@ -20,6 +20,7 @@
           {% if current_user.is_admin %}
             <a class="header-note" href="/admin?lang=en">Admin</a>
           {% else %}
+            <a class="header-note" href="/about?lang=en">About us</a>
             <a class="header-note" href="{% if week == 'next' %}/?lang=en{% else %}/?week=next&lang=en{% endif %}">{% if week == 'next' %}Coming delivery{% else %}Order for next week{% endif %}</a>
           {% endif %}
           <span class="account-chip">{% if current_user.is_guest %}Guest{% else %}{{ current_user.username }}{% endif %}</span>
@@ -27,6 +28,8 @@
             <input type="hidden" name="lang" value="en">
             <button type="submit">Sign out</button>
           </form>
+        {% else %}
+          <a class="header-note" href="/about?lang=en">About us</a>
         {% endif %}
         <nav class="lang-switch" aria-label="Language">
           <a href="{{ switch_he }}" hreflang="he" lang="he">עברית</a>

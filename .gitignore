@@ -7,3 +7,5 @@ __pycache__/
 data/*.db
 data/*.db-*
 *.log
+Catalog.doc.mht
+Catalog.doc_files/

@@ -88,11 +88,19 @@ def main() -> None:
         expect("Order for next week" in home.text, "home is missing the next-week link")
         expect("לחם בהר" in home.text, "the business name should lead the english page")
         expect("hero-loaf.jpg" in home.text, "the home page is missing its stand-in photo")
-        expect("country-loaf.jpg" in home.text, "product photos were not switched on")
+        expect("/static/images/catalog/spelt-100.jpg" in home.text, "catalog product photo missing")
+        expect("100% Whole Spelt Sourdough" in home.text, "new catalog product missing")
         expect("Playfair+Display" in home.text, "serif face is not loaded")
         expect('lang="en"' in home.text, "english page is missing its language")
         expect("Guest" in home.text, "guest account chip missing")
+        expect("About us" in home.text, "about link missing")
         expect("Payment by Grow" not in home.text, "Grow payment copy should be gone")
+
+        about = client.get("/about?lang=en")
+        expect(about.status_code == 200, "about page missing")
+        expect("home boutique bakery" in about.text, "about copy missing")
+        about_he = client.get("/about?lang=he")
+        expect("מאפיית בוטיק ביתית" in about_he.text, "hebrew about copy missing")
 
         from app.config import get_settings
 
@@ -119,7 +127,7 @@ def main() -> None:
 
         slots = client.get("/api/v1/slots?lang=en").json()
         products = client.get("/api/v1/products").json()
-        expect(len(products) == 3, "expected three seeded loaves")
+        expect(len(products) == 12, "expected twelve catalog products")
         expect(len(slots) == 1, "the screen should offer one delivery week")
         day = slots[0]["date"]
         delivery = date.fromisoformat(day)
@@ -146,8 +154,8 @@ def main() -> None:
         expect("/static/images/payment/bit.svg" in chosen.text, "Bit icon is missing")
         expect("/static/images/payment/paybox.svg" in chosen.text, "PayBox icon is missing")
         hebrew_bake = client.get(f"/?date={day}&lang=he")
-        expect("לחם מחמצת כפרי" in hebrew_bake.text, "hebrew product title is missing")
-        expect("כיכר גרעינים" in hebrew_bake.text, "hebrew seeded loaf title is missing")
+        expect("לחם מחמצת כוסמין מלא 100%" in hebrew_bake.text, "hebrew product title is missing")
+        expect("חלה מחמצת" in hebrew_bake.text, "hebrew challah title is missing")
         expect("איך לחייב" in hebrew_bake.text, "hebrew payment picker is missing")
 
         client.post("/logout", data={"lang": "en"}, follow_redirects=False)
