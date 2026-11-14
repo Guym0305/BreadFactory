@@ -39,6 +39,8 @@ class Product(Base):
     ingredients_en = Column(Text, nullable=True)
     ingredients_he = Column(Text, nullable=True)
     fermentation_hours = Column(Integer, default=30)
+    delivery_limit = Column(Integer, nullable=True)
+    counts_toward_capacity = Column(Boolean, nullable=False, default=True)
 
 
 class Customer(Base):

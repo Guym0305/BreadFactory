@@ -1,0 +1,160 @@
+{% extends "he/base.html" %}
+
+{% block title %}הסל · לחם בהר{% endblock %}
+
+{% block content %}
+  <section class="shell bake" aria-labelledby="cart-heading">
+    <h2 id="cart-heading">הסל</h2>
+    {% if error %}
+      <p class="banner banner-error" role="alert">{{ error }}</p>
+    {% endif %}
+    {% if reordered %}
+      <p class="banner banner-welcome" role="status">ההזמנה הקודמת נמצאת עכשיו בסל.</p>
+    {% endif %}
+    {% if reordered_skipped %}
+      <p class="banner" role="status">חלק מהפריטים מההזמנה הזו כבר לא זמינים.</p>
+    {% endif %}
+    {% if deadline_closed and choices %}
+      <p class="banner banner-welcome" role="status">המשלוח הזה הוא ליום שישי הבא, {{ choices[0].slot.day }} ב{{ choices[0].slot.month }}. המועד להזמנה ליום שישי הזה עבר.</p>
+      <div class="delivery-options">
+        <div class="delivery-option is-selected">
+          <div>
+            <p class="week-label">יום שישי הבא</p>
+            <p class="week-date">{{ choices[0].slot.weekday }}</p>
+            <p>{{ choices[0].slot.day }} ב{{ choices[0].slot.month }}</p>
+          </div>
+        </div>
+      </div>
+    {% elif choices %}
+      <form class="delivery-choice" action="/cart/delivery" method="post">
+        <input type="hidden" name="lang" value="he">
+        <fieldset>
+          <legend>משלוח</legend>
+          <div class="delivery-options">
+            {% for choice in choices %}
+              <label class="delivery-option">
+                <input type="radio" name="delivery_date" value="{{ choice.slot.date }}" {% if choice.slot.date == selected_delivery %}checked{% endif %}>
+                <span>
+                  <span class="week-label">{% if choice.key == 'coming' %}המשלוח הקרוב{% else %}המשלוח הבא{% endif %}</span>
+                  <span class="week-date">{{ choice.slot.weekday }}</span>
+                  <span>{{ choice.slot.day }} ב{{ choice.slot.month }}</span>
+                </span>
+              </label>
+            {% endfor %}
+          </div>
+        </fieldset>
+        <button class="text-button" type="submit">בחירת משלוח</button>
+      </form>
+    {% endif %}
+    {% if not lines %}
+      <p class="cart-empty">הסל ריק. <a href="/?lang=he">בחרו כיכר</a> מהאפייה של השבוע.</p>
+    {% elif slot %}
+      <p class="meta">{{ slot.label }} · {{ slot.window }} · {% if slot.remaining == 1 %}נותרה כיכר אחת{% else %}נותרו {{ slot.remaining }} כיכרות{% endif %}</p>
+    {% endif %}
+
+    <form class="order-form" action="/checkout" method="post" data-remaining="{{ slot.remaining if slot else 0 }}" data-one-loaf="כיכר אחת" data-many-loaves="{n} כיכרות" data-choose-loaf="בחרו לפחות כיכר אחת." data-choose-payment="בחרו איך תשלמו." data-enter-payment-other="הזינו איך תשלמו.">
+      <button class="pay-button cart-default-submit" type="submit" tabindex="-1" aria-hidden="true">שליחת הזמנה</button>
+      <input type="hidden" name="lang" value="he">
+      <input type="hidden" name="delivery_date" value="{{ slot.date if slot else delivery_date }}">
+
+      {% if lines %}
+        <div class="cart-lines">
+          {% for line in lines %}
+            <article class="cart-line">
+              <figure>
+                <img src="{{ line.product.image_url }}" alt="פנים הכיכר והקרום של {{ line.product.name_he }}" width="400" height="400">
+              </figure>
+              <div>
+                <h3>{{ line.product.name_he }}</h3>
+                <p class="price">{{ line.product.price|money }}</p>
+                <div class="cart-line-actions">
+                  <div class="qty">
+                    <button type="button" class="step" data-dir="-1" aria-label="הסרת כיכר אחת של {{ line.product.name_he }}">−</button>
+                    <input class="qty-input" type="number" name="qty_{{ line.product.id }}" value="{{ line.quantity }}" min="0" max="{{ line.max_quantity }}" inputmode="numeric" data-price="{{ line.product.price }}" data-counts="{{ 1 if line.product.counts_toward_capacity else 0 }}" aria-label="כמות של {{ line.product.name_he }}">
+                    <button type="button" class="step" data-dir="1" aria-label="הוספת כיכר אחת של {{ line.product.name_he }}">+</button>
+                  </div>
+                  <button class="text-button" type="submit" formaction="/cart/remove" formnovalidate name="product_id" value="{{ line.product.id }}" data-skip-validate="true">הסרה</button>
+                </div>
+              </div>
+            </article>
+          {% endfor %}
+        </div>
+        <div class="order-bar cart-summary">
+          <p><span data-count>0 כיכרות</span></p>
+          <p><span data-total>₪0</span></p>
+          <button class="text-button" type="submit" formaction="/cart/update" formnovalidate data-skip-validate="true">עדכון הסל</button>
+        </div>
+      {% endif %}
+
+      <div class="details" id="details">
+        <h2>פרטי המשלוח</h2>
+        <label>
+          <span>שם מלא</span>
+          <input name="full_name" required maxlength="100" autocomplete="name" value="{{ saved.get('full_name', '') }}">
+        </label>
+        <label>
+          <span>טלפון</span>
+          <input name="phone" type="tel" required maxlength="20" autocomplete="tel" value="{{ saved.get('phone', '') }}">
+        </label>
+        <label>
+          <span>דוא״ל</span>
+          <input name="email" type="email" required maxlength="100" autocomplete="email" value="{{ saved.get('email', '') }}">
+        </label>
+        <label>
+          <span>כתובת למשלוח</span>
+          <textarea name="address" required maxlength="500" rows="3" autocomplete="street-address">{{ saved.get('address', '') }}</textarea>
+        </label>
+        <fieldset class="pay-methods">
+          <legend>איך לחייב</legend>
+          <div class="pay-method-grid" role="radiogroup" aria-label="איך לחייב">
+            <label class="pay-method">
+              <input type="radio" name="payment_method" value="bit" {% if saved.get('payment_method') == 'bit' %}checked{% endif %}>
+              <span class="pay-method-face">
+                <img src="/static/images/payment/bit.svg" alt="" width="40" height="40">
+                <span>Bit</span>
+              </span>
+            </label>
+            <label class="pay-method">
+              <input type="radio" name="payment_method" value="paybox" {% if saved.get('payment_method') == 'paybox' %}checked{% endif %}>
+              <span class="pay-method-face">
+                <img src="/static/images/payment/paybox.svg" alt="" width="40" height="40">
+                <span>PayBox</span>
+              </span>
+            </label>
+            <label class="pay-method">
+              <input type="radio" name="payment_method" value="bank_transfer" {% if saved.get('payment_method') == 'bank_transfer' %}checked{% endif %}>
+              <span class="pay-method-face">
+                <img src="/static/images/payment/bank.svg" alt="" width="40" height="40">
+                <span>העברה בנקאית</span>
+              </span>
+            </label>
+            <label class="pay-method">
+              <input type="radio" name="payment_method" value="cash" {% if saved.get('payment_method') == 'cash' %}checked{% endif %}>
+              <span class="pay-method-face">
+                <img src="/static/images/payment/cash.svg" alt="" width="40" height="40">
+                <span>מזומן</span>
+              </span>
+            </label>
+            <label class="pay-method">
+              <input type="radio" name="payment_method" value="other" {% if saved.get('payment_method') == 'other' %}checked{% endif %}>
+              <span class="pay-method-face">
+                <span class="pay-method-other-icon" aria-hidden="true">…</span>
+                <span>אחר</span>
+              </span>
+            </label>
+          </div>
+          <label class="pay-other{% if saved.get('payment_method') != 'other' %} is-hidden{% endif %}" data-pay-other>
+            <span>תשלום אחר</span>
+            <input name="payment_other" maxlength="120" autocomplete="off" value="{{ saved.get('payment_other', '') }}" placeholder="שורה קצרה אחת">
+          </label>
+        </fieldset>
+        <label>
+          <span>הערות <em>רשות</em></span>
+          <textarea name="notes" maxlength="1000" rows="2">{{ saved.get('notes', '') }}</textarea>
+        </label>
+        <p class="form-message" id="order-message" role="alert"></p>
+        <button class="pay-button" type="submit">שליחת הזמנה</button>
+      </div>
+    </form>
+  </section>
+{% endblock %}

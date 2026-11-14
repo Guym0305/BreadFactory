@@ -51,6 +51,14 @@
         <span>כתובת תמונה</span>
         <input name="image_url" maxlength="255" value="{{ form.get('image_url', product.image_url or '') }}">
       </label>
+      <label>
+        <span>הגבלה של מוצר זה למשלוח אחד</span>
+        <input name="delivery_limit" inputmode="numeric" placeholder="ללא הגבלה נוספת" value="{{ form.get('delivery_limit', product.delivery_limit if product.delivery_limit is not none else '') }}">
+      </label>
+      <label class="admin-check">
+        <input type="checkbox" name="counts_toward_capacity" value="1" {% if form.get('counts_toward_capacity', product.counts_toward_capacity) %}checked{% endif %}>
+        <span>נכלל במכסה הכללית</span>
+      </label>
       <label class="admin-check">
         <input type="checkbox" name="is_active" value="1" {% if form.get('is_active', product.is_active) %}checked{% endif %}>
         <span>פעיל באתר</span>

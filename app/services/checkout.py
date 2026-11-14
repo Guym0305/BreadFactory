@@ -9,7 +9,7 @@ from app.i18n import t
 from app.services.auth import assert_customer_credentials_available
 from app.services.errors import CheckoutError
 from app.services.orders import serialize_order
-from app.services.slots import delivery_datetime, require_slot
+from app.services.slots import assert_cart_fits, delivery_datetime
 
 
 def parse_checkout(data: dict) -> CheckoutIn:
@@ -55,13 +55,12 @@ def checkout_from_form(form) -> CheckoutIn:
 
 
 def create_checkout(db: Session, data: CheckoutIn, user: User | None = None) -> Order:
-    slot = require_slot(db, data.delivery_date)
     chosen = _priced_lines(db, data)
-    requested = sum(quantity for _, quantity in chosen)
-    if requested > slot.remaining:
-        if slot.remaining == 1:
-            raise CheckoutError(t("one_left"))
-        raise CheckoutError(t("n_left", n=slot.remaining))
+    assert_cart_fits(
+        db,
+        data.delivery_date,
+        {product.id: quantity for product, quantity in chosen},
+    )
 
     if user is not None:
         customer = db.query(Customer).filter(Customer.id == user.customer_id).one_or_none()

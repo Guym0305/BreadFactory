@@ -1,0 +1,41 @@
+{% extends "he/base.html" %}
+{% block title %}ההזמנות שלי · לחם בהר{% endblock %}
+
+{% block content %}
+  <section class="shell bake" aria-labelledby="orders-heading">
+    <p class="kicker">היסטוריה</p>
+    <h2 id="orders-heading">ההזמנות שלי</h2>
+    {% if error %}
+      <p class="banner banner-error" role="alert">{{ error }}</p>
+    {% endif %}
+    <p class="lede">הזמנה חוזרת מוסיפה את הפריטים לסל למשלוח הפתוח.</p>
+    {% if not orders %}
+      <p class="cart-empty">אין הזמנות עדיין. <a href="/?lang=he">בחרו כיכר</a> מהאפייה של השבוע.</p>
+    {% else %}
+      <div class="order-history">
+        {% for order in orders %}
+          <article class="past-order">
+            <h2>{{ order.number }}</h2>
+            <p class="meta">{{ order.delivery|delivery_label(lang) }} · {{ order.status }}</p>
+            <ul class="summary">
+              {% for line in order.lines %}
+                <li>
+                  <span>{{ line.quantity }} × {{ line.name }}</span>
+                  <span>{{ line.total|money }}</span>
+                </li>
+              {% endfor %}
+              <li class="total">
+                <span>סה״כ</span>
+                <span>{{ order.total|money }}</span>
+              </li>
+            </ul>
+            <form method="post" action="/orders/{{ order.number }}/reorder">
+              <input type="hidden" name="lang" value="he">
+              <button class="pay-button" type="submit">הזמנה חוזרת</button>
+            </form>
+          </article>
+        {% endfor %}
+      </div>
+    {% endif %}
+  </section>
+{% endblock %}

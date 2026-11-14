@@ -184,6 +184,7 @@ SEED_PRODUCTS = [
         "ingredients_en": "Flour, brown butter, dark chocolate, Maldon salt, sugar, eggs",
         "ingredients_he": "קמח, חמאה חומה, שוקולד מריר, מלח מלדון, סוכר, ביצים",
         "fermentation_hours": 0,
+        "counts_toward_capacity": False,
     },
 ]
 
@@ -222,7 +223,11 @@ def seed_products(db: Session) -> None:
         payload = {key: record[key] for key in fields}
         current = by_en.get(record["name_en"]) or by_he.get(record["name_he"])
         if current is None:
-            current = Product(**payload, is_active=True)
+            current = Product(
+                **payload,
+                is_active=True,
+                counts_toward_capacity=record.get("counts_toward_capacity", True),
+            )
             db.add(current)
         else:
             for key, value in payload.items():

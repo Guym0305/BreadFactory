@@ -34,7 +34,8 @@
           <span>{{ order.total_amount|money }}</span>
         </li>
       </ul>
-      <p><a class="pay-button" href="{% if current_user %}/?lang=en{% else %}/login?lang=en{% endif %}">Back to home</a></p>
+      <p><a class="pay-button" href="/orders?lang=en">My Orders</a></p>
+      <p><a href="{% if current_user %}/?lang=en{% else %}/login?lang=en{% endif %}">Back to home</a></p>
     {% endif %}
   </section>
 {% endblock %}

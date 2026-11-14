@@ -16,6 +16,13 @@
     };
 
     const used = () => inputs.reduce((sum, input) => sum + valueOf(input), 0);
+    const countsToward = (input) => input.dataset.counts !== "0";
+    const counted = () =>
+      inputs.reduce((sum, input) => sum + (countsToward(input) ? valueOf(input) : 0), 0);
+    const lineMax = (input) => {
+      const parsed = Number(input.max);
+      return Number.isNaN(parsed) ? 99 : parsed;
+    };
 
     const selectedPayment = () => {
       const chosen = paymentInputs.find((input) => input.checked);
@@ -53,11 +60,14 @@
     };
 
     const clamp = (input) => {
-      input.value = String(valueOf(input));
-      const overflow = used() - remaining;
-      if (overflow > 0) {
-        input.value = String(Math.max(valueOf(input) - overflow, 0));
+      let next = valueOf(input);
+      if (countsToward(input)) {
+        const overflow = counted() - remaining;
+        if (overflow > 0) {
+          next -= overflow;
+        }
       }
+      input.value = String(Math.max(Math.min(next, lineMax(input)), 0));
       render();
     };
 
@@ -65,11 +75,11 @@
       button.addEventListener("click", () => {
         const input = button.parentElement.querySelector(".qty-input");
         const direction = Number(button.dataset.dir);
-        if (direction > 0 && used() >= remaining) {
+        const next = valueOf(input) + direction;
+        if (next < 0 || next > lineMax(input)) {
           return;
         }
-        const next = valueOf(input) + direction;
-        if (next < 0) {
+        if (direction > 0 && countsToward(input) && counted() >= remaining) {
           return;
         }
         input.value = String(next);
@@ -88,6 +98,10 @@
     });
 
     form.addEventListener("submit", (event) => {
+      const submitter = event.submitter;
+      if (submitter && submitter.dataset.skipValidate === "true") {
+        return;
+      }
       if (message) {
         message.textContent = "";
       }
@@ -120,4 +134,38 @@
     syncPaymentOther();
     render();
   }
+
+  document.querySelectorAll(".add-cart").forEach((addForm) => {
+    const input = addForm.querySelector(".qty-input");
+    if (!input) {
+      return;
+    }
+    const max = Number(addForm.dataset.remaining || input.max || 1);
+    const valueOf = () => {
+      const parsed = Number.parseInt(input.value, 10);
+      return Number.isNaN(parsed) || parsed < 1 ? 1 : parsed;
+    };
+    const clamp = () => {
+      const ceiling = Math.max(max, 1);
+      input.value = String(Math.min(Math.max(valueOf(), 1), ceiling));
+    };
+    addForm.querySelectorAll(".step").forEach((button) => {
+      button.addEventListener("click", () => {
+        const next = valueOf() + Number(button.dataset.dir);
+        if (next < 1 || next > max) {
+          return;
+        }
+        input.value = String(next);
+      });
+    });
+    input.addEventListener("input", clamp);
+  });
+
+  document.querySelectorAll(".delivery-choice").forEach((choiceForm) => {
+    choiceForm.querySelectorAll('input[name="delivery_date"]').forEach((input) => {
+      input.addEventListener("change", () => {
+        choiceForm.requestSubmit();
+      });
+    });
+  });
 })();

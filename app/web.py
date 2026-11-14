@@ -1,5 +1,5 @@
 from datetime import date
-from urllib.parse import quote
+from urllib.parse import parse_qsl, quote, urlencode, urlsplit
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import RedirectResponse
@@ -36,11 +36,19 @@ from app.services.auth import (
     set_login_welcome,
     set_session_user,
 )
+from app.services.cart import MAX_LINE, Cart, clear_cart, quantities_from_form, read_cart, write_cart
 from app.services.checkout import checkout_from_form, create_checkout
 from app.services.errors import CheckoutError
-from app.services.orders import get_order
+from app.services.orders import get_order, list_customer_orders
 from app.services.payments import apply_webhook
-from app.services.slots import cycle_for, list_slots, week_choice_for
+from app.services.slots import (
+    assert_cart_fits,
+    cycle_for,
+    list_slots,
+    ordering_closed,
+    reserved_product_quantities,
+    week_choice_for,
+)
 from app.templating import redirect_path, render
 
 router = APIRouter(tags=["pages"])
@@ -119,6 +127,211 @@ def _require_admin(request: Request, db: Session):
     return user, None
 
 
+def _return_path(raw: str | None, flag: str) -> str:
+    safe = _next_path(None if raw is None else str(raw))
+    parts = urlsplit(safe)
+    query = dict(parse_qsl(parts.query, keep_blank_values=True))
+    query.pop("added", None)
+    query.pop("replaced", None)
+    query[flag] = "1"
+    encoded = urlencode(query)
+    path = parts.path or "/"
+    return f"{path}?{encoded}" if encoded else path
+
+
+def _customer_or_redirect(request: Request, db: Session, next_path: str):
+    user = current_user(request, db)
+    if user is None:
+        return None, _login_redirect(request, next_path)
+    if user.is_admin:
+        return None, RedirectResponse(redirect_path("/admin"), status_code=303)
+    return user, None
+
+
+def _active_products(db: Session, product_ids: list[int]) -> dict[int, Product]:
+    if not product_ids:
+        return {}
+    return {
+        product.id: product
+        for product in db.query(Product).filter(Product.id.in_(product_ids), Product.is_active.is_(True))
+    }
+
+
+def _line_caps(db: Session, slot, quantities: dict[int, int], products: dict[int, Product]) -> dict[int, int]:
+    if slot is None:
+        return {product_id: quantity for product_id, quantity in quantities.items()}
+    taken = reserved_product_quantities(db, slot.date)
+    counted = sum(
+        quantity
+        for product_id, quantity in quantities.items()
+        if (product := products.get(product_id)) is not None and product.counts_toward_capacity
+    )
+    spare = max(slot.remaining - counted, 0)
+    caps: dict[int, int] = {}
+    for product_id, quantity in quantities.items():
+        product = products.get(product_id)
+        if product is None:
+            continue
+        cap = quantity + spare if product.counts_toward_capacity else 99
+        if product.delivery_limit is not None:
+            cap = min(cap, max(product.delivery_limit - taken.get(product_id, 0), 0))
+        caps[product_id] = max(cap, 0)
+    return caps
+
+
+def _product_rooms(db: Session, products: list[Product], cart_quantities: dict[int, int], slot, day: date | None):
+    rooms: dict[int, int] = {}
+    if slot is None or day is None:
+        return rooms, False
+    taken = reserved_product_quantities(db, day)
+    by_id = {product.id: product for product in products}
+    cart_counted = sum(
+        quantity
+        for product_id, quantity in cart_quantities.items()
+        if (product := by_id.get(product_id)) is not None and product.counts_toward_capacity
+    )
+    spare = max(slot.remaining - cart_counted, 0)
+    for product in products:
+        cap = spare if product.counts_toward_capacity else 99
+        if product.delivery_limit is not None:
+            already = taken.get(product.id, 0) + cart_quantities.get(product.id, 0)
+            cap = min(cap, max(product.delivery_limit - already, 0))
+        rooms[product.id] = max(cap, 0)
+    return rooms, spare == 0 and cart_counted > 0
+
+
+def _posted_lang(form) -> str | None:
+    posted = form.get("lang")
+    return str(posted) if posted else None
+
+
+def _whole_quantity(raw, *, minimum: int) -> int:
+    try:
+        quantity = int(str(raw).strip())
+    except (TypeError, ValueError) as exc:
+        raise CheckoutError(t("whole_number")) from exc
+    if quantity < minimum or quantity > 99:
+        raise CheckoutError(t("choose_loaf") if quantity < 1 else t("whole_number"))
+    return quantity
+
+
+def _product_id(raw) -> int:
+    try:
+        product_id = int(str(raw).strip())
+    except (TypeError, ValueError) as exc:
+        raise CheckoutError(t("choose_from_bake")) from exc
+    if product_id < 1:
+        raise CheckoutError(t("choose_from_bake"))
+    return product_id
+
+
+def _posted_quantities(form_saved: dict) -> dict[int, int]:
+    quantities: dict[int, int] = {}
+    for key, value in form_saved.items():
+        if not str(key).startswith("qty_"):
+            continue
+        raw = str(value).strip()
+        if raw in ("", "0"):
+            continue
+        try:
+            quantities[int(str(key).removeprefix("qty_"))] = int(raw)
+        except ValueError:
+            continue
+    return quantities
+
+
+def _slot_for_day(db: Session, day: date, lang: str):
+    week = week_choice_for(day)
+    slots = list_slots(db, lang=lang, week=week)
+    slot = slots[0] if slots and slots[0].date == day else None
+    return slot, week
+
+
+def _delivery_choices(db: Session, lang: str) -> tuple[list[dict], bool]:
+    closed = ordering_closed()
+    weeks = ("coming",) if closed else ("coming", "next")
+    keys = ("next_friday",) if closed else ("coming", "next")
+    choices = []
+    for week, key in zip(weeks, keys, strict=True):
+        slots = list_slots(db, lang=lang, week=week)
+        if slots:
+            choices.append({"key": key, "slot": slots[0]})
+    return choices, closed
+
+
+def _selected_day(cart: Cart, choices: list[dict]) -> date | None:
+    allowed = {item["slot"].date for item in choices}
+    if cart.delivery_date in allowed:
+        return cart.delivery_date
+    if choices:
+        return choices[0]["slot"].date
+    return cart.delivery_date
+
+
+def _render_cart(
+    request: Request,
+    db: Session,
+    *,
+    error: str | None = None,
+    saved: dict | None = None,
+    status_code: int = 200,
+    user=None,
+):
+    lang = get_lang()
+    cart = read_cart(request)
+    choices, deadline_closed = _delivery_choices(db, lang)
+    form_saved = dict(saved or {})
+    selected = _selected_day(cart, choices)
+    posted_day = _parse_date(form_saved.get("delivery_date"))
+    allowed = {item["slot"].date for item in choices}
+    if posted_day in allowed:
+        selected = posted_day
+    if any(str(key).startswith("qty_") for key in form_saved):
+        quantities = _posted_quantities(form_saved)
+    else:
+        quantities = dict(cart.quantities)
+    slot = None
+    week = "coming"
+    for choice in choices:
+        if choice["slot"].date == selected:
+            slot = choice["slot"]
+            week = "next" if choice["key"] == "next" else "coming"
+            break
+    products = _active_products(db, list(quantities))
+    line_caps = _line_caps(db, slot, quantities, products)
+    lines = []
+    for product_id, quantity in sorted(quantities.items()):
+        product = products.get(product_id)
+        if product is None or quantity <= 0:
+            continue
+        lines.append(
+            {
+                "product": product,
+                "quantity": quantity,
+                "max_quantity": line_caps.get(product_id, quantity),
+            }
+        )
+    if user is not None and user.customer is not None:
+        for key, value in customer_form_defaults(user.customer).items():
+            form_saved.setdefault(key, value)
+    context = {
+        "lines": lines,
+        "slot": slot,
+        "error": error,
+        "saved": form_saved,
+        "week": week,
+        "current_user": user,
+        "delivery_date": selected.isoformat() if selected else "",
+        "cart_count": sum(line["quantity"] for line in lines),
+        "choices": choices,
+        "deadline_closed": deadline_closed,
+        "selected_delivery": selected,
+        "reordered": request.query_params.get("reordered") == "1" and error is None,
+        "reordered_skipped": request.query_params.get("skipped") == "1" and error is None,
+    }
+    return render(request, "cart.html", context, status_code=status_code)
+
+
 def _render_home(
     request: Request,
     db: Session,
@@ -137,9 +350,7 @@ def _render_home(
     slot = slots[0] if slots else None
     if selected is not None and slot is not None and selected != slot.date and error is None:
         error = t("choose_morning")
-    if slot is not None and not slot.available and error is None:
-        error = t("fully_booked")
-    show_bake = slot is not None and slot.available
+    show_bake = slot is not None
     products = []
     if show_bake:
         products = db.query(Product).filter(Product.is_active.is_(True)).order_by(Product.id).all()
@@ -147,15 +358,31 @@ def _render_home(
     if user is not None and user.customer is not None:
         for key, value in customer_form_defaults(user.customer).items():
             form_saved.setdefault(key, value)
+    visible_slot = slot if show_bake else None
+    cart = read_cart(request)
+    choices, deadline_closed = _delivery_choices(db, lang)
+    allowed = {item["slot"].date: item["slot"] for item in choices}
+    target = cart.delivery_date if cart.delivery_date in allowed else (visible_slot.date if visible_slot else None)
+    cart_quantities = {pid: qty for pid, qty in cart.quantities.items() if qty > 0}
+    cart_held = sum(cart_quantities.values())
+    limit = allowed.get(target) if target in allowed else visible_slot
+    product_room, cart_holds_bake = _product_rooms(db, products, cart_quantities, limit, target)
     context = {
         "slots": slots,
         "products": products,
-        "slot": slot if show_bake else None,
+        "slot": visible_slot,
         "error": error,
         "saved": form_saved,
         "lang": lang,
         "week": week,
         "current_user": user,
+        "cart_quantities": cart_quantities,
+        "cart_held": cart_held,
+        "product_room": product_room,
+        "bake_full": visible_slot is not None and visible_slot.remaining <= 0,
+        "cart_holds_bake": cart_holds_bake,
+        "added": request.query_params.get("added") == "1" and error is None,
+        "deadline_closed": deadline_closed,
     }
     return render(request, "index.html", context, status_code=status_code)
 
@@ -533,6 +760,8 @@ async def admin_product_save(request: Request, product_id: int, db: Session = De
         "fermentation_hours": str(form.get("fermentation_hours") or ""),
         "image_url": str(form.get("image_url") or ""),
         "is_active": str(form.get("is_active") or "") == "1",
+        "delivery_limit": str(form.get("delivery_limit") or ""),
+        "counts_toward_capacity": str(form.get("counts_toward_capacity") or "") == "1",
     }
     try:
         assert_same_origin(request)
@@ -682,6 +911,261 @@ def admin_delivery_list(
     )
 
 
+@router.get("/cart")
+def cart_page(request: Request, db: Session = Depends(get_db)):
+    resolve_lang(request)
+    user, redirect = _customer_or_redirect(request, db, "/cart")
+    if redirect is not None:
+        return redirect
+    return _render_cart(request, db, user=user)
+
+
+@router.post("/cart/add")
+async def add_to_cart(request: Request, db: Session = Depends(get_db)):
+    form = await request.form()
+    _use_lang(request, _posted_lang(form))
+    user, redirect = _customer_or_redirect(request, db, "/")
+    if redirect is not None:
+        return redirect
+    day = _parse_date(str(form.get("delivery_date") or ""))
+    try:
+        assert_same_origin(request)
+        product_id = _product_id(form.get("product_id"))
+        quantity = _whole_quantity(form.get("quantity") or "1", minimum=1)
+        products = _active_products(db, [product_id])
+        if product_id not in products:
+            raise CheckoutError(t("unavailable"))
+        cart = read_cart(request)
+        choices, _closed = _delivery_choices(db, get_lang())
+        allowed = {item["slot"].date: item["slot"] for item in choices}
+        if cart.delivery_date in allowed:
+            day = cart.delivery_date
+        elif day not in allowed:
+            if not choices:
+                raise CheckoutError(t("choose_morning"))
+            day = choices[0]["slot"].date
+        quantities = dict(cart.quantities)
+        quantities[product_id] = quantities.get(product_id, 0) + quantity
+        assert_cart_fits(db, day, quantities)
+        cart = Cart(day, quantities)
+    except CheckoutError as exc:
+        return _render_home(
+            request,
+            db,
+            selected=day,
+            error=exc.message,
+            status_code=exc.status_code,
+            week="coming",
+            user=user,
+        )
+    response = RedirectResponse(_return_path(form.get("next"), "added"), status_code=303)
+    write_cart(response, cart)
+    return response
+
+
+@router.post("/cart/delivery")
+async def choose_delivery(request: Request, db: Session = Depends(get_db)):
+    form = await request.form()
+    _use_lang(request, _posted_lang(form))
+    user, redirect = _customer_or_redirect(request, db, "/cart")
+    if redirect is not None:
+        return redirect
+    day = _parse_date(str(form.get("delivery_date") or ""))
+    cart = read_cart(request)
+    try:
+        assert_same_origin(request)
+        choices, _closed = _delivery_choices(db, get_lang())
+        allowed = {item["slot"].date: item["slot"] for item in choices}
+        if day not in allowed:
+            raise CheckoutError(t("choose_morning"))
+        assert_cart_fits(db, day, cart.quantities)
+    except CheckoutError as exc:
+        saved = _saved_form(form)
+        saved["delivery_date"] = cart.delivery_date.isoformat() if cart.delivery_date else ""
+        for product_id, quantity in cart.quantities.items():
+            saved[f"qty_{product_id}"] = str(quantity)
+        return _render_cart(
+            request,
+            db,
+            error=exc.message,
+            saved=saved,
+            status_code=exc.status_code,
+            user=user,
+        )
+    response = RedirectResponse(redirect_path("/cart"), status_code=303)
+    write_cart(response, Cart(day, dict(cart.quantities)))
+    return response
+
+
+@router.post("/cart/update")
+async def update_cart(request: Request, db: Session = Depends(get_db)):
+    form = await request.form()
+    saved = _saved_form(form)
+    _use_lang(request, _posted_lang(form))
+    user, redirect = _customer_or_redirect(request, db, "/cart")
+    if redirect is not None:
+        return redirect
+    day = _parse_date(saved.get("delivery_date"))
+    try:
+        assert_same_origin(request)
+        quantities = quantities_from_form(form)
+        assert_cart_fits(db, day, quantities)
+    except CheckoutError as exc:
+        return _render_cart(
+            request,
+            db,
+            error=exc.message,
+            saved=saved,
+            status_code=exc.status_code,
+            user=user,
+        )
+    response = RedirectResponse(redirect_path("/cart"), status_code=303)
+    write_cart(response, Cart(day if quantities else None, quantities))
+    return response
+
+
+@router.post("/cart/remove")
+async def remove_from_cart(request: Request, db: Session = Depends(get_db)):
+    form = await request.form()
+    saved = _saved_form(form)
+    _use_lang(request, _posted_lang(form))
+    user, redirect = _customer_or_redirect(request, db, "/cart")
+    if redirect is not None:
+        return redirect
+    day = _parse_date(saved.get("delivery_date"))
+    try:
+        assert_same_origin(request)
+        product_id = _product_id(form.get("product_id"))
+        quantities = quantities_from_form(form)
+        quantities.pop(product_id, None)
+        assert_cart_fits(db, day, quantities)
+    except CheckoutError as exc:
+        return _render_cart(
+            request,
+            db,
+            error=exc.message,
+            saved=saved,
+            status_code=exc.status_code,
+            user=user,
+        )
+    response = RedirectResponse(redirect_path("/cart"), status_code=303)
+    write_cart(response, Cart(day if quantities else None, quantities))
+    return response
+
+
+_STATUS_LABELS = {
+    "en": {
+        "PAID": "Paid",
+        "DELIVERED": "Delivered",
+        "CANCELLED": "Cancelled",
+        "PENDING_PAYMENT": "Awaiting payment",
+    },
+    "he": {
+        "PAID": "שולם",
+        "DELIVERED": "נמסר",
+        "CANCELLED": "בוטל",
+        "PENDING_PAYMENT": "ממתין לתשלום",
+    },
+}
+
+
+def _history_rows(db: Session, user, lang: str) -> list[dict]:
+    labels = _STATUS_LABELS["he" if lang == "he" else "en"]
+    rows = []
+    for order in list_customer_orders(db, user.customer_id):
+        lines = []
+        for item in order.items:
+            product = item.product
+            if lang == "he":
+                name = (product.name_he or product.name) if product is not None else "לחם"
+            else:
+                name = (product.name_en or product.name) if product is not None else "Loaf"
+            lines.append(
+                {
+                    "name": name,
+                    "quantity": item.quantity,
+                    "total": round(item.quantity * item.unit_price, 2),
+                }
+            )
+        status = _status_value(order)
+        rows.append(
+            {
+                "number": order.order_number,
+                "delivery": order.delivery_date,
+                "status": labels.get(status, status),
+                "total": order.total_amount,
+                "lines": lines,
+            }
+        )
+    return rows
+
+
+def _render_orders(request: Request, db: Session, user, *, error: str | None = None, status_code: int = 200):
+    lang = get_lang()
+    return render(
+        request,
+        "orders.html",
+        {
+            "current_user": user,
+            "orders": _history_rows(db, user, lang),
+            "error": error,
+        },
+        status_code=status_code,
+    )
+
+
+@router.get("/orders")
+def my_orders(request: Request, db: Session = Depends(get_db)):
+    resolve_lang(request)
+    user, redirect = _customer_or_redirect(request, db, "/orders")
+    if redirect is not None:
+        return redirect
+    return _render_orders(request, db, user)
+
+
+@router.post("/orders/{order_number}/reorder")
+async def reorder(request: Request, order_number: str, db: Session = Depends(get_db)):
+    form = await request.form()
+    _use_lang(request, _posted_lang(form))
+    user, redirect = _customer_or_redirect(request, db, "/orders")
+    if redirect is not None:
+        return redirect
+    order = get_order(db, order_number)
+    if order is None or order.customer_id != user.customer_id:
+        raise HTTPException(status_code=404, detail=t("order_not_found"))
+    try:
+        assert_same_origin(request)
+        active = _active_products(db, [item.product_id for item in order.items])
+        additions: dict[int, int] = {}
+        skipped = False
+        for item in order.items:
+            if item.product_id not in active or item.quantity < 1:
+                skipped = True
+                continue
+            additions[item.product_id] = additions.get(item.product_id, 0) + item.quantity
+        if not additions:
+            raise CheckoutError(t("reorder_unavailable"))
+        cart = read_cart(request)
+        choices, _closed = _delivery_choices(db, get_lang())
+        allowed = {item["slot"].date for item in choices}
+        if cart.delivery_date in allowed:
+            day = cart.delivery_date
+        elif choices:
+            day = choices[0]["slot"].date
+        else:
+            raise CheckoutError(t("choose_morning"))
+        quantities = dict(cart.quantities)
+        for product_id, quantity in additions.items():
+            quantities[product_id] = min(quantities.get(product_id, 0) + quantity, MAX_LINE)
+        assert_cart_fits(db, day, quantities)
+    except CheckoutError as exc:
+        return _render_orders(request, db, user, error=exc.message, status_code=exc.status_code)
+    query = "reordered=1&skipped=1" if skipped else "reordered=1"
+    response = RedirectResponse(redirect_path(f"/cart?{query}"), status_code=303)
+    write_cart(response, Cart(day, quantities))
+    return response
+
+
 @router.get("/")
 def home(
     request: Request,
@@ -698,7 +1182,7 @@ def home(
     if user.is_admin:
         return RedirectResponse(redirect_path("/admin"), status_code=302)
     selected = _parse_date(delivery_date)
-    week = "next" if request.query_params.get("week") == "next" else "coming"
+    week = "coming"
     error = None
     if delivery_date and selected is None:
         error = t("choose_morning")
@@ -717,17 +1201,17 @@ async def start_checkout(request: Request, db: Session = Depends(get_db)):
         assert_same_origin(request)
         order = create_checkout(db, checkout_from_form(form), user=user)
     except CheckoutError as exc:
-        return _render_home(
+        return _render_cart(
             request,
             db,
-            selected=_parse_date(saved.get("delivery_date")),
             error=exc.message,
             saved=saved,
             status_code=exc.status_code,
-            week=week_choice_for(_parse_date(saved.get("delivery_date"))),
             user=user,
         )
-    return RedirectResponse(redirect_path(f"/order-success?order_id={order.order_number}"), status_code=303)
+    response = RedirectResponse(redirect_path(f"/order-success?order_id={order.order_number}"), status_code=303)
+    clear_cart(response)
+    return response
 
 
 @router.get("/checkout/{order_number}")

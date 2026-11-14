@@ -6,6 +6,16 @@ from app.models.bakery import Order, OrderItem, OrderStatus
 from app.schemas.order import OrderLineOut, OrderStatusOut
 
 
+def list_customer_orders(db: Session, customer_id: int) -> list[Order]:
+    statement = (
+        select(Order)
+        .options(joinedload(Order.items).joinedload(OrderItem.product))
+        .where(Order.customer_id == customer_id)
+        .order_by(Order.delivery_date.desc(), Order.id.desc())
+    )
+    return list(db.execute(statement).unique().scalars().all())
+
+
 def get_order(db: Session, order_number: str) -> Order | None:
     statement = (
         select(Order)

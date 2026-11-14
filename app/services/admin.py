@@ -163,6 +163,8 @@ def update_product(
     fermentation_hours: str,
     image_url: str,
     is_active: bool,
+    delivery_limit: str = "",
+    counts_toward_capacity: bool = True,
 ) -> Product:
     product = get_admin_product(db, product_id)
     cleaned_en = name_en.strip()
@@ -181,6 +183,16 @@ def update_product(
         raise CheckoutError(t("admin_bad_hours")) from exc
     if hours < 0 or hours > 240:
         raise CheckoutError(t("admin_bad_hours"))
+    limit_text = str(delivery_limit).strip()
+    if limit_text == "":
+        limit = None
+    else:
+        try:
+            limit = int(limit_text)
+        except ValueError as exc:
+            raise CheckoutError(t("admin_bad_limit")) from exc
+        if limit < 0 or limit > 999:
+            raise CheckoutError(t("admin_bad_limit"))
 
     product.name_en = cleaned_en or None
     product.name_he = cleaned_he or None
@@ -195,6 +207,8 @@ def update_product(
     product.fermentation_hours = hours
     product.image_url = image_url.strip() or None
     product.is_active = is_active
+    product.delivery_limit = limit
+    product.counts_toward_capacity = counts_toward_capacity
     db.commit()
     db.refresh(product)
     return product

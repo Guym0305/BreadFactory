@@ -16,12 +16,15 @@
   </section>
 
   <section class="shell choose" id="delivery" aria-labelledby="delivery-heading">
-    <h2 id="delivery-heading">{% if week == 'next' %}השבוע הבא{% else %}השבוע{% endif %}</h2>
+    <h2 id="delivery-heading">{% if deadline_closed %}יום שישי הבא{% else %}משלוח{% endif %}</h2>
     {% if welcome_message %}
       <p class="banner banner-welcome" role="status">{{ welcome_message }}</p>
     {% endif %}
     {% if error %}
       <p class="banner banner-error" role="alert">{{ error }}</p>
+    {% endif %}
+    {% if deadline_closed and slots %}
+      <p class="banner banner-welcome" role="status">המשלוח הזה הוא ליום שישי הבא, {{ slots[0].day }} ב{{ slots[0].month }}. המועד להזמנה ליום שישי הזה עבר.</p>
     {% endif %}
     {% if slots %}
       {% set item = slots[0] %}
@@ -47,105 +50,63 @@
     <section class="shell bake" id="the-bake" aria-labelledby="bake-heading">
       <div class="order-bar">
         <p>{{ slot.label }} · {{ slot.window }}</p>
-        <p><span data-count>0 כיכרות</span> · <span data-total>₪0</span></p>
+        <p><a href="/cart?lang=he">לסל{% if cart_held %} · {{ cart_held }}{% endif %}</a></p>
       </div>
       <h2 id="bake-heading">
         {% if slot.remaining == 1 %}נותרה כיכר אחת למשלוח הזה.{% else %}נותרו {{ slot.remaining }} כיכרות למשלוח הזה.{% endif %}
       </h2>
-      <form class="order-form" action="/checkout" method="post" data-remaining="{{ slot.remaining }}" data-one-loaf="כיכר אחת" data-many-loaves="{n} כיכרות" data-choose-loaf="בחרו לפחות כיכר אחת." data-choose-payment="בחרו איך תשלמו." data-enter-payment-other="הזינו איך תשלמו.">
-        <input type="hidden" name="lang" value="he">
-        <input type="hidden" name="delivery_date" value="{{ slot.date }}">
-        <div class="loaves">
-          {% for product in products %}
-            <article class="loaf">
-              <figure>
-                <img src="{{ product.image_url }}" alt="פנים הכיכר והקרום של {{ product.name_he }}" width="1400" height="1050" loading="lazy" decoding="async">
-              </figure>
-              <div class="loaf-copy">
-                <h3>{{ product.name_he }}</h3>
-                <p class="price">{{ product.price|money }}</p>
-                <p>{{ product.description_he }}</p>
-                <p class="meta">{% if product.fermentation_hours %}התפחה של {{ product.fermentation_hours }} שעות · {% endif %}{{ product.ingredients_he }}</p>
-                <div class="qty">
-                  <button type="button" class="step" data-dir="-1" aria-label="הסרת כיכר אחת של {{ product.name_he }}">−</button>
-                  <input class="qty-input" type="number" name="qty_{{ product.id }}" value="{{ saved.get('qty_' ~ product.id, '0') }}" min="0" max="{{ slot.remaining }}" inputmode="numeric" data-price="{{ product.price }}" aria-label="כמות של {{ product.name_he }}">
-                  <button type="button" class="step" data-dir="1" aria-label="הוספת כיכר אחת של {{ product.name_he }}">+</button>
-                </div>
-              </div>
-            </article>
-          {% endfor %}
-        </div>
-
-        <div class="details" id="details">
-          <h2>פרטי המשלוח</h2>
-          <label>
-            <span>שם מלא</span>
-            <input name="full_name" required maxlength="100" autocomplete="name" value="{{ saved.get('full_name', '') }}">
-          </label>
-          <label>
-            <span>טלפון</span>
-            <input name="phone" type="tel" required maxlength="20" autocomplete="tel" value="{{ saved.get('phone', '') }}">
-          </label>
-          <label>
-            <span>דוא״ל</span>
-            <input name="email" type="email" required maxlength="100" autocomplete="email" value="{{ saved.get('email', '') }}">
-          </label>
-          <label>
-            <span>כתובת למשלוח</span>
-            <textarea name="address" required maxlength="500" rows="3" autocomplete="street-address">{{ saved.get('address', '') }}</textarea>
-          </label>
-          <fieldset class="pay-methods">
-            <legend>איך לחייב</legend>
-            <div class="pay-method-grid" role="radiogroup" aria-label="איך לחייב">
-              <label class="pay-method">
-                <input type="radio" name="payment_method" value="bit" {% if saved.get('payment_method') == 'bit' %}checked{% endif %}>
-                <span class="pay-method-face">
-                  <img src="/static/images/payment/bit.svg" alt="" width="40" height="40">
-                  <span>Bit</span>
-                </span>
-              </label>
-              <label class="pay-method">
-                <input type="radio" name="payment_method" value="paybox" {% if saved.get('payment_method') == 'paybox' %}checked{% endif %}>
-                <span class="pay-method-face">
-                  <img src="/static/images/payment/paybox.svg" alt="" width="40" height="40">
-                  <span>PayBox</span>
-                </span>
-              </label>
-              <label class="pay-method">
-                <input type="radio" name="payment_method" value="bank_transfer" {% if saved.get('payment_method') == 'bank_transfer' %}checked{% endif %}>
-                <span class="pay-method-face">
-                  <img src="/static/images/payment/bank.svg" alt="" width="40" height="40">
-                  <span>העברה בנקאית</span>
-                </span>
-              </label>
-              <label class="pay-method">
-                <input type="radio" name="payment_method" value="cash" {% if saved.get('payment_method') == 'cash' %}checked{% endif %}>
-                <span class="pay-method-face">
-                  <img src="/static/images/payment/cash.svg" alt="" width="40" height="40">
-                  <span>מזומן</span>
-                </span>
-              </label>
-              <label class="pay-method">
-                <input type="radio" name="payment_method" value="other" {% if saved.get('payment_method') == 'other' %}checked{% endif %}>
-                <span class="pay-method-face">
-                  <span class="pay-method-other-icon" aria-hidden="true">…</span>
-                  <span>אחר</span>
-                </span>
-              </label>
+      {% if added %}
+        <p class="banner banner-welcome" role="status">הכיכר נוספה לסל. <a href="/cart?lang=he">לצפייה בסל</a></p>
+      {% endif %}
+      {% if bake_full %}
+        <p class="banner" role="status">מכסת האפייה למשלוח הזה מלאה. פריטים שאינם נכללים במכסה הכללית עדיין ניתנים להזמנה.</p>
+      {% elif cart_holds_bake %}
+        <p class="banner" role="status">כל הכיכרות שנותרו למשלוח הזה כבר בסל. <a href="/cart?lang=he">לצפייה בסל</a></p>
+      {% endif %}
+      <div class="loaves">
+        {% for product in products %}
+          {% set held = cart_quantities.get(product.id, 0) %}
+          {% set add_room = product_room.get(product.id, 0) %}
+          <article class="loaf">
+            <figure>
+              <img src="{{ product.image_url }}" alt="פנים הכיכר והקרום של {{ product.name_he }}" width="1400" height="1050" loading="lazy" decoding="async">
+            </figure>
+            <div class="loaf-copy">
+              <h3>{{ product.name_he }}</h3>
+              <p class="price">{{ product.price|money }}</p>
+              <p>{{ product.description_he }}</p>
+              <p class="meta">{% if product.fermentation_hours %}התפחה של {{ product.fermentation_hours }} שעות · {% endif %}{{ product.ingredients_he }}</p>
+              {% if product.delivery_limit is not none %}
+                <p class="meta">עד {{ product.delivery_limit }} למשלוח הזה.</p>
+              {% endif %}
+              {% if not product.counts_toward_capacity %}
+                <p class="meta">לא נספר במכסה הכללית.</p>
+              {% endif %}
+              {% if add_room > 0 %}
+                <form class="add-cart" action="/cart/add" method="post" data-remaining="{{ add_room }}">
+                  <input type="hidden" name="lang" value="he">
+                  <input type="hidden" name="delivery_date" value="{{ slot.date }}">
+                  <input type="hidden" name="product_id" value="{{ product.id }}">
+                  <input type="hidden" name="next" value="/?lang=he">
+                  <div class="qty">
+                    <button type="button" class="step" data-dir="-1" aria-label="פחות {{ product.name_he }}">−</button>
+                    <input class="qty-input" type="number" name="quantity" value="1" min="1" max="{{ add_room }}" inputmode="numeric" aria-label="כמות להוספה של {{ product.name_he }}">
+                    <button type="button" class="step" data-dir="1" aria-label="עוד {{ product.name_he }}">+</button>
+                  </div>
+                  <button class="pay-button" type="submit">הוספה לסל</button>
+                </form>
+              {% else %}
+                <p class="meta">לא נותר מהפריט הזה למשלוח.</p>
+              {% endif %}
+              {% if held == 1 %}
+                <p class="meta">כיכר אחת בסל</p>
+              {% elif held %}
+                <p class="meta">{{ held }} כיכרות בסל</p>
+              {% endif %}
             </div>
-            <label class="pay-other{% if saved.get('payment_method') != 'other' %} is-hidden{% endif %}" data-pay-other>
-              <span>תשלום אחר</span>
-              <input name="payment_other" maxlength="120" autocomplete="off" value="{{ saved.get('payment_other', '') }}" placeholder="שורה קצרה אחת">
-            </label>
-          </fieldset>
-          <label>
-            <span>הערות <em>רשות</em></span>
-            <textarea name="notes" maxlength="1000" rows="2">{{ saved.get('notes', '') }}</textarea>
-          </label>
-          <p class="form-message" id="order-message" role="alert"></p>
-          <button class="pay-button" type="submit">שליחת הזמנה</button>
-        </div>
-      </form>
+          </article>
+        {% endfor %}
+      </div>
     </section>
   {% endif %}
 {% endblock %}

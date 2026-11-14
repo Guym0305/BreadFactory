@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.config import get_settings
 from app.i18n import t
-from app.models.bakery import Order, OrderItem, OrderStatus, utcnow
+from app.models.bakery import Order, OrderItem, OrderStatus, Product, utcnow
 from app.services.errors import CheckoutError
 
 BAKERY_TZ = ZoneInfo("Asia/Jerusalem")
@@ -117,6 +117,17 @@ def coming_cycle(now: datetime | None = None) -> tuple[date, date]:
     return sunday + timedelta(days=3), sunday + timedelta(days=5)
 
 
+def this_weeks_friday(now: datetime | None = None) -> date:
+    current = now or bakery_now()
+    return week_sunday(current.date()) + timedelta(days=5)
+
+
+def ordering_closed(now: datetime | None = None) -> bool:
+    """True from Thursday on, once this Friday can no longer be ordered."""
+    _, coming = coming_cycle(now)
+    return coming != this_weeks_friday(now)
+
+
 def cycle_for(week: str, now: datetime | None = None) -> tuple[date, date]:
     order_by, delivery = coming_cycle(now)
     if week == "next":
@@ -131,17 +142,24 @@ def week_choice_for(day: date | None, now: datetime | None = None) -> str:
     return "next" if day != coming else "coming"
 
 
-def reserved_quantities(db: Session, days: list[date]) -> dict[date, int]:
-    totals = {day: 0 for day in days}
+def _reservation_rows(db: Session, days: list[date]):
     if not days:
-        return totals
+        return []
     settings = get_settings()
     start = datetime.combine(min(days), time.min)
     end = datetime.combine(max(days) + timedelta(days=1), time.min)
     cutoff = utcnow() - timedelta(minutes=settings.payment_hold_minutes)
     rows = (
-        db.query(Order.delivery_date, Order.status, Order.created_at, OrderItem.quantity)
+        db.query(
+            Order.delivery_date,
+            Order.status,
+            Order.created_at,
+            OrderItem.product_id,
+            OrderItem.quantity,
+            Product.counts_toward_capacity,
+        )
         .join(OrderItem, OrderItem.order_id == Order.id)
+        .join(Product, Product.id == OrderItem.product_id)
         .filter(Order.delivery_date >= start, Order.delivery_date < end)
         .filter(
             Order.status.in_(
@@ -150,14 +168,69 @@ def reserved_quantities(db: Session, days: list[date]) -> dict[date, int]:
         )
         .all()
     )
-    for delivery_date, status, created_at, quantity in rows:
+    kept = []
+    for delivery_date, status, created_at, product_id, quantity, counts in rows:
         day = delivery_date.date()
-        if day not in totals:
+        if day not in days:
             continue
         if status == OrderStatus.PENDING_PAYMENT and created_at is not None and created_at < cutoff:
             continue
-        totals[day] += quantity
+        kept.append((day, product_id, quantity, bool(counts)))
+    return kept
+
+
+def reserved_quantities(db: Session, days: list[date]) -> dict[date, int]:
+    totals = {day: 0 for day in days}
+    for day, _product_id, quantity, counts in _reservation_rows(db, days):
+        if counts:
+            totals[day] += quantity
     return totals
+
+
+def reserved_product_quantities(db: Session, day: date) -> dict[int, int]:
+    totals: dict[int, int] = {}
+    for _day, product_id, quantity, _counts in _reservation_rows(db, [day]):
+        totals[product_id] = totals.get(product_id, 0) + quantity
+    return totals
+
+
+def assert_cart_fits(db: Session, day: date | None, quantities: dict[int, int]) -> DeliverySlot:
+    """Check a basket against the general bake limit and each product limit."""
+    slot = find_slot(db, day)
+    if not quantities:
+        return slot
+    products = {
+        product.id: product
+        for product in db.query(Product).filter(
+            Product.id.in_(list(quantities)),
+            Product.is_active.is_(True),
+        )
+    }
+    if set(quantities) - set(products):
+        raise CheckoutError(t("unavailable"))
+    taken = reserved_product_quantities(db, slot.date)
+    counted = 0
+    for product_id, quantity in quantities.items():
+        product = products[product_id]
+        if product.counts_toward_capacity:
+            counted += quantity
+        limit = product.delivery_limit
+        if limit is None:
+            continue
+        left = limit - taken.get(product_id, 0)
+        if quantity > left:
+            if left <= 0:
+                raise CheckoutError(t("product_sold_out"))
+            if left == 1:
+                raise CheckoutError(t("product_one_left"))
+            raise CheckoutError(t("product_n_left", n=left))
+    if counted > slot.remaining:
+        if slot.remaining <= 0:
+            raise CheckoutError(t("fully_booked"))
+        if slot.remaining == 1:
+            raise CheckoutError(t("one_left"))
+        raise CheckoutError(t("n_left", n=slot.remaining))
+    return slot
 
 
 def list_slots(db: Session, now: datetime | None = None, lang: str = "en", week: str = "coming") -> list[DeliverySlot]:
@@ -169,12 +242,19 @@ def list_slots(db: Session, now: datetime | None = None, lang: str = "en", week:
     return [DeliverySlot(delivery, remaining, capacity, lang, order_by)]
 
 
-def require_slot(db: Session, day: date) -> DeliverySlot:
+def find_slot(db: Session, day: date | None) -> DeliverySlot:
+    if day is None:
+        raise CheckoutError(t("choose_morning"))
     now = bakery_now()
     for week in ("coming", "next"):
         for slot in list_slots(db, now, week=week):
             if slot.date == day:
-                if not slot.available:
-                    raise CheckoutError(t("fully_booked"))
                 return slot
     raise CheckoutError(t("choose_morning"))
+
+
+def require_slot(db: Session, day: date) -> DeliverySlot:
+    slot = find_slot(db, day)
+    if not slot.available:
+        raise CheckoutError(t("fully_booked"))
+    return slot

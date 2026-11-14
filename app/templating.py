@@ -7,6 +7,7 @@ from pathlib import Path
 
 from app.i18n import get_lang, language_switch, resolve_lang, set_lang, t
 from app.services.auth import WELCOME_COOKIE, consume_login_welcome
+from app.services.cart import read_cart
 from app.services.slots import DELIVERY_WINDOW, MONTHS, WEEKDAYS
 
 PAYMENT_LABEL_KEYS = {
@@ -27,6 +28,7 @@ def render(request: Request, name: str, context: dict, status_code: int = 200) -
     context["lang"] = lang
     context.setdefault("week", "coming")
     context.setdefault("current_user", None)
+    context.setdefault("cart_count", read_cart(request).loaf_count)
     welcome_name = context.pop("welcome_name", None)
     if welcome_name is None:
         welcome_name = consume_login_welcome(request)

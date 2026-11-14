@@ -9,3 +9,5 @@ data/*.db-*
 *.log
 Catalog.doc.mht
 Catalog.doc_files/
+tools/
+bread-factory-*.json
