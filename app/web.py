@@ -40,6 +40,7 @@ from app.services.cart import MAX_LINE, Cart, clear_cart, quantities_from_form, 
 from app.services.checkout import checkout_from_form, create_checkout
 from app.services.errors import CheckoutError
 from app.services.orders import get_order, list_customer_orders
+from app.services.places import registration_address
 from app.services.payments import apply_webhook
 from app.services.slots import (
     assert_cart_fits,
@@ -465,10 +466,19 @@ async def register_submit(request: Request, db: Session = Depends(get_db)):
         "full_name": str(form.get("full_name") or ""),
         "phone": str(form.get("phone") or ""),
         "email": str(form.get("email") or ""),
-        "address": str(form.get("address") or ""),
+        "fulfillment": str(form.get("fulfillment") or ""),
+        "delivery_city": str(form.get("delivery_city") or ""),
+        "street_address": str(form.get("street_address") or ""),
+        "pickup_point": str(form.get("pickup_point") or ""),
     }
     try:
         assert_same_origin(request)
+        address = registration_address(
+            saved_register["fulfillment"],
+            saved_register["delivery_city"],
+            saved_register["pickup_point"],
+            saved_register["street_address"],
+        )
         user = register_user(
             db,
             username,
@@ -476,7 +486,7 @@ async def register_submit(request: Request, db: Session = Depends(get_db)):
             full_name=saved_register["full_name"],
             phone=saved_register["phone"],
             email=saved_register["email"],
-            address=saved_register["address"],
+            address=address,
         )
     except CheckoutError as exc:
         return render(

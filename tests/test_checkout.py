@@ -82,6 +82,9 @@ def main() -> None:
         expect(login_page.status_code == 200, "login page missing")
         expect("Continue as Guest" in login_page.text, "guest option missing")
         expect("Create account" in login_page.text, "register form missing")
+        expect("Pickup" in login_page.text, "pickup choice missing")
+        expect("Har Adar" in login_page.text, "delivery towns missing")
+        expect("Yehuda Winery in Moshav Shoresh" in login_page.text, "pickup points missing")
 
         become_guest(client)
         home = client.get("/?lang=en")
@@ -436,6 +439,21 @@ def main() -> None:
         stolen = client.post(f"/orders/{order_number}/reorder", data={"lang": "en"})
         expect(stolen.status_code == 404, "another customer copied this order")
         client.post("/logout", data={"lang": "en"}, follow_redirects=False)
+        missing_town = client.post(
+            "/register",
+            data={
+                "username": "no_town",
+                "password": "secret12",
+                "full_name": "No Town",
+                "phone": "0508888888",
+                "email": "no.town@example.com",
+                "fulfillment": "delivery",
+                "lang": "en",
+                "next": "/",
+            },
+        )
+        expect(missing_town.status_code == 400, "registration without a town was accepted")
+        expect("Choose a town we deliver to." in missing_town.text, "town error missing")
         registered = client.post(
             "/register",
             data={
@@ -444,7 +462,9 @@ def main() -> None:
                 "full_name": "Noa Baker",
                 "phone": "0506666666",
                 "email": "noa.baker@example.com",
-                "address": "5 Bread Lane, Jerusalem",
+                "fulfillment": "delivery",
+                "delivery_city": "neve-ilan",
+                "street_address": "5 Bread Lane",
                 "lang": "en",
                 "next": "/",
             },
@@ -456,7 +476,7 @@ def main() -> None:
         details = client.get("/cart?lang=en")
         expect('value="Noa Baker"' in details.text, "registered customer name was not prefilled")
         expect('value="0506666666"' in details.text, "registered customer phone was not prefilled")
-        expect("5 Bread Lane, Jerusalem" in details.text, "registered customer address was not prefilled")
+        expect("Delivery · Neve Ilan, 5 Bread Lane" in details.text, "registered customer address was not prefilled")
 
         db = SessionLocal()
         try:
@@ -477,7 +497,9 @@ def main() -> None:
                 "full_name": "Other Noa",
                 "phone": "0506666666",
                 "email": "other.noa@example.com",
-                "address": "9 Other Street, Tel Aviv",
+                "fulfillment": "delivery",
+                "delivery_city": "har-adar",
+                "street_address": "9 Other Street",
                 "lang": "en",
                 "next": "/",
             },
@@ -502,7 +524,8 @@ def main() -> None:
                 "full_name": "גיא מ",
                 "phone": "0507777777",
                 "email": "guy.he@example.com",
-                "address": "1 Jaffa Street, Jerusalem",
+                "fulfillment": "pickup",
+                "pickup_point": "mevaseret-harotem",
                 "lang": "he",
                 "next": "/",
             },
@@ -511,6 +534,8 @@ def main() -> None:
         expect(hebrew_user.status_code == 303, "Hebrew username registration failed")
         hebrew_home = client.get("/?lang=he")
         expect("גיא_01" in hebrew_home.text, "Hebrew username missing from header")
+        hebrew_cart = client.get("/cart?lang=he")
+        expect("איסוף עצמי · מבשרת ציון (רחוב הרותם 15)" in hebrew_cart.text, "pickup address was not saved")
         client.post("/logout", data={"lang": "en"}, follow_redirects=False)
 
         good_login = client.post(

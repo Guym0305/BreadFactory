@@ -11,6 +11,11 @@ MESSAGES = {
     "en": {
         "enter_name": "Enter a name.",
         "enter_address": "Enter an address.",
+        "choose_fulfillment": "Choose delivery or pickup.",
+        "choose_city": "Choose a town we deliver to.",
+        "choose_pickup": "Choose a pickup point.",
+        "fulfillment_delivery": "Delivery",
+        "fulfillment_pickup": "Pickup",
         "name_long": "Name is too long.",
         "address_long": "Address is too long.",
         "phone": "Enter a phone number we can reach you on.",
@@ -71,6 +76,11 @@ MESSAGES = {
     "he": {
         "enter_name": "הזינו שם.",
         "enter_address": "הזינו כתובת.",
+        "choose_fulfillment": "בחרו משלוח או איסוף עצמי.",
+        "choose_city": "בחרו ישוב שאליו אנחנו מגיעים.",
+        "choose_pickup": "בחרו נקודת איסוף.",
+        "fulfillment_delivery": "משלוח",
+        "fulfillment_pickup": "איסוף עצמי",
         "name_long": "השם ארוך מדי.",
         "address_long": "הכתובת ארוכה מדי.",
         "phone": "הזינו מספר טלפון שאפשר להשיג אתכם בו.",

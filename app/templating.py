@@ -8,6 +8,7 @@ from pathlib import Path
 from app.i18n import get_lang, language_switch, resolve_lang, set_lang, t
 from app.services.auth import WELCOME_COOKIE, consume_login_welcome
 from app.services.cart import read_cart
+from app.services.places import DELIVERY_CITIES, PICKUP_POINTS
 from app.services.slots import DELIVERY_WINDOW, MONTHS, WEEKDAYS
 
 PAYMENT_LABEL_KEYS = {
@@ -36,6 +37,9 @@ def render(request: Request, name: str, context: dict, status_code: int = 200) -
         context["welcome_message"] = t("welcome_back", name=welcome_name)
     else:
         context.setdefault("welcome_message", None)
+    if name == "login.html":
+        context["delivery_cities"] = DELIVERY_CITIES
+        context["pickup_points"] = PICKUP_POINTS
     context["switch_he"] = language_switch(request, "he")
     context["switch_en"] = language_switch(request, "en")
     response = HTMLResponse(templates.get_template(f"{lang}/{name}").render(context), status_code=status_code)

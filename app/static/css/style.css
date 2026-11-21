@@ -622,13 +622,16 @@ label span em {
 }
 
 input,
-textarea {
+textarea,
+select {
   width: 100%;
   padding: 0.85rem 0.9rem;
   border: 1px solid var(--color-clay);
   border-radius: 0;
   background: transparent;
   font-size: 16px;
+  font-family: inherit;
+  color: inherit;
 }
 
 textarea {
@@ -637,6 +640,7 @@ textarea {
 
 input:focus-visible,
 textarea:focus-visible,
+select:focus-visible,
 .step:focus-visible,
 .slot:focus-visible,
 .pay-button:focus-visible,
@@ -712,6 +716,93 @@ a:focus-visible {
   font-family: var(--font-serif);
   font-size: 1.45rem;
   font-weight: 500;
+}
+
+.fulfillment {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  display: grid;
+  gap: 0.85rem;
+  min-width: 0;
+}
+
+.fulfillment legend {
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  font-size: 0.72rem;
+  font-weight: 500;
+  margin-bottom: 0.15rem;
+}
+
+html[lang="he"] .fulfillment legend {
+  letter-spacing: 0;
+  text-transform: none;
+  font-size: 0.95rem;
+}
+
+.fulfillment-choices {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.65rem;
+}
+
+.fulfillment-choice {
+  margin: 0;
+  cursor: pointer;
+}
+
+.fulfillment-choice input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+  width: 1px;
+  height: 1px;
+}
+
+.fulfillment-choice span {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 3rem;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--color-clay);
+  letter-spacing: 0;
+  text-transform: none;
+  font-size: 0.95rem;
+  text-align: center;
+}
+
+.fulfillment-choice input:checked + span {
+  border-color: var(--color-olive);
+  background: rgba(62, 74, 52, 0.08);
+}
+
+.fulfillment-choice input:focus-visible + span {
+  outline: 2px solid var(--color-gold);
+  outline-offset: 3px;
+}
+
+.fulfillment-panel {
+  display: grid;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.fulfillment-panel.is-pickup {
+  display: none;
+}
+
+.fulfillment:has(input[value="pickup"]:checked) .fulfillment-panel.is-delivery {
+  display: none;
+}
+
+.fulfillment:has(input[value="pickup"]:checked) .fulfillment-panel.is-pickup {
+  display: grid;
+}
+
+.street-address.is-waiting {
+  display: none;
 }
 
 .guest-card {
