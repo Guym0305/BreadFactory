@@ -54,7 +54,7 @@
         {% set reg = saved_register if mode == 'register' else {} %}
         {% set fulfillment = reg.get('fulfillment', 'delivery') %}
         <fieldset class="fulfillment">
-          <legend>איך לקבל את המשלוח</legend>
+          <legend>איך לקבל את ההזמנה</legend>
           <div class="fulfillment-choices">
             <label class="fulfillment-choice">
               <input type="radio" name="fulfillment" value="delivery" {% if fulfillment != 'pickup' %}checked{% endif %}>
