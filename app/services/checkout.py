@@ -9,6 +9,7 @@ from app.i18n import t
 from app.services.auth import assert_customer_credentials_available
 from app.services.errors import CheckoutError
 from app.services.orders import serialize_order
+from app.services.places import registration_address
 from app.services.slots import assert_cart_fits, delivery_datetime
 
 
@@ -39,12 +40,23 @@ def checkout_from_form(form) -> CheckoutIn:
             raise CheckoutError(t("choose_from_bake")) from exc
         lines.append({"product_id": product_id, "quantity": quantity})
 
+    fulfillment = str(form.get("fulfillment") or "").strip()
+    if fulfillment:
+        address = registration_address(
+            fulfillment,
+            str(form.get("delivery_city") or ""),
+            str(form.get("pickup_point") or ""),
+            str(form.get("street_address") or ""),
+        )
+    else:
+        address = str(form.get("address") or "")
+
     return parse_checkout(
         {
             "full_name": form.get("full_name", ""),
             "phone": form.get("phone", ""),
             "email": form.get("email", ""),
-            "address": form.get("address", ""),
+            "address": address,
             "notes": form.get("notes", ""),
             "payment_method": form.get("payment_method", ""),
             "payment_other": form.get("payment_other", ""),

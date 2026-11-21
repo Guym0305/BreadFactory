@@ -71,20 +71,30 @@ def main() -> None:
     expect(mask_card("4580123412341234") == "****1234", "full card numbers must be masked")
 
     with TestClient(app) as client:
-        locked = client.get("/?lang=en", follow_redirects=False)
-        expect(locked.status_code == 303, "home should require login")
-        expect("/login" in locked.headers["location"], locked.headers["location"])
+        opened = client.get("/?lang=en", follow_redirects=False)
+        expect(opened.status_code == 200, "catalog should open without an account")
+        expect("Sign in" in opened.text, "sign-in link missing")
+        expect("account-chip" not in opened.text, "anonymous visit should not show an account")
+        expect("Last ordering" in opened.text, "home is missing the Wednesday deadline")
+        expect("challah-sourdough.jpg" in opened.text, "catalog hero photo missing")
+        expect("/static/images/logo.jpg" in opened.text, "bakery logo missing from the catalog")
+        expect('dir="ltr"' in opened.text, "english page should read left to right")
         locked_orders = client.get("/orders?lang=en", follow_redirects=False)
         expect(locked_orders.status_code == 303, "order history should require login")
         expect("/login" in locked_orders.headers["location"], locked_orders.headers["location"])
 
         login_page = client.get("/login?lang=en")
         expect(login_page.status_code == 200, "login page missing")
-        expect("Continue as Guest" in login_page.text, "guest option missing")
+        expect("Back to the menu" in login_page.text, "menu link missing")
         expect("Create account" in login_page.text, "register form missing")
+        expect("country-classic.jpg" in login_page.text, "login photo missing")
         expect("Pickup" in login_page.text, "pickup choice missing")
         expect("Har Adar" in login_page.text, "delivery towns missing")
         expect("Yehuda Winery in Moshav Shoresh" in login_page.text, "pickup points missing")
+        browse = client.get("/cart?lang=en")
+        expect(browse.status_code == 200, "cart should open without an account")
+        expect("Have an account? Sign in" in browse.text, "cart sign-in prompt missing")
+        expect("Har Adar" in browse.text, "cart delivery towns missing")
 
         become_guest(client)
         home = client.get("/?lang=en")
@@ -94,7 +104,7 @@ def main() -> None:
         expect("Cart" in home.text, "cart link is missing")
         expect("My Orders" in home.text, "order history link is missing")
         expect("לחם בהר" in home.text, "the business name should lead the english page")
-        expect("hero-loaf.jpg" in home.text, "the home page is missing its stand-in photo")
+        expect("challah-sourdough.jpg" in home.text, "the home page is missing its loaf photo")
         expect("/static/images/catalog/spelt-100.jpg" in home.text, "catalog product photo missing")
         expect("100% Whole Spelt Sourdough" in home.text, "new catalog product missing")
         expect("Playfair+Display" in home.text, "serif face is not loaded")
@@ -106,16 +116,20 @@ def main() -> None:
         about = client.get("/about?lang=en")
         expect(about.status_code == 200, "about page missing")
         expect("home boutique bakery" in about.text, "about copy missing")
+        expect("https://www.instagram.com/lehem.bahar/" in about.text, "instagram link missing")
         about_he = client.get("/about?lang=he")
         expect("מאפיית בוטיק ביתית" in about_he.text, "hebrew about copy missing")
+        expect("https://www.instagram.com/lehem.bahar/" in about_he.text, "hebrew instagram link missing")
 
         from app.config import get_settings
 
         os.environ["SESSION_EPOCH"] = "test-revision-after-deploy"
         get_settings.cache_clear()
-        after_deploy = client.get("/?lang=en", follow_redirects=False)
+        after_deploy = client.get("/orders?lang=en", follow_redirects=False)
         expect(after_deploy.status_code == 303, "new deploy should clear the prior session")
         expect("/login" in after_deploy.headers["location"], after_deploy.headers["location"])
+        cleared_home = client.get("/?lang=en")
+        expect("account-chip" not in cleared_home.text, "cleared session still shows an account")
         os.environ.pop("SESSION_EPOCH", None)
         get_settings.cache_clear()
         become_guest(client)
@@ -476,7 +490,8 @@ def main() -> None:
         details = client.get("/cart?lang=en")
         expect('value="Noa Baker"' in details.text, "registered customer name was not prefilled")
         expect('value="0506666666"' in details.text, "registered customer phone was not prefilled")
-        expect("Delivery · Neve Ilan, 5 Bread Lane" in details.text, "registered customer address was not prefilled")
+        expect('value="neve-ilan" selected' in details.text, "registered delivery town was not prefilled")
+        expect("5 Bread Lane" in details.text, "registered street was not prefilled")
 
         db = SessionLocal()
         try:
@@ -535,7 +550,8 @@ def main() -> None:
         hebrew_home = client.get("/?lang=he")
         expect("גיא_01" in hebrew_home.text, "Hebrew username missing from header")
         hebrew_cart = client.get("/cart?lang=he")
-        expect("איסוף עצמי · מבשרת ציון (רחוב הרותם 15)" in hebrew_cart.text, "pickup address was not saved")
+        expect('value="pickup" checked' in hebrew_cart.text, "pickup choice was not saved")
+        expect('value="mevaseret-harotem" selected' in hebrew_cart.text, "pickup point was not saved")
         client.post("/logout", data={"lang": "en"}, follow_redirects=False)
 
         good_login = client.post(
@@ -729,6 +745,38 @@ def main() -> None:
             expect(db.query(User).filter_by(username="גיא_01").one_or_none() is None, "hebrew user still present")
         finally:
             db.close()
+
+        client.post("/logout", data={"lang": "en"}, follow_redirects=False)
+        cookie = next(item for item in products if "Cookie" in item["name_en"])
+        anon = client.post(
+            "/checkout",
+            data={
+                "delivery_date": day,
+                "qty_" + str(cookie["id"]): "1",
+                "full_name": "Anon Buyer",
+                "phone": "0501010101",
+                "email": "anon@example.com",
+                "fulfillment": "delivery",
+                "delivery_city": "har-adar",
+                "street_address": "1 Hill Road",
+                "payment_method": "cash",
+                "lang": "en",
+            },
+            follow_redirects=False,
+        )
+        expect(anon.status_code == 303, "anonymous checkout did not place the order")
+        expect("/order-success" in anon.headers["location"], anon.headers["location"])
+        confirmed = client.get(anon.headers["location"])
+        expect("Anon Buyer" in confirmed.text, "anonymous order name missing")
+        expect("Delivery · Har Adar, 1 Hill Road" in confirmed.text, "anonymous delivery address missing")
+        expect("Guest" in confirmed.text, "checkout should sign in the new guest")
+        anon_orders = client.get("/orders?lang=en")
+        expect(anon_orders.status_code == 200, "guest created at checkout cannot see the order")
+        expect(cookie["name_en"] in anon_orders.text, "anonymous order missing from history")
+        client.post("/logout", data={"lang": "en"}, follow_redirects=False)
+        admin_gate = client.get("/admin?lang=en", follow_redirects=False)
+        expect(admin_gate.status_code == 303, "admin desk should still ask for a sign-in")
+        expect("/login" in admin_gate.headers["location"], admin_gate.headers["location"])
 
     print("order flow ok")
 

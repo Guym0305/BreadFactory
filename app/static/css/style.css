@@ -246,8 +246,31 @@ a.header-note {
   object-fit: cover;
 }
 
+.brand-lockup {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  max-width: 100%;
+  min-width: 0;
+  margin-bottom: 1rem;
+}
+
+.brand-logo {
+  width: clamp(4.25rem, 7vw, 5.75rem);
+  height: clamp(4.25rem, 7vw, 5.75rem);
+  flex: none;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.brand-lockup h1.brand-display {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: clamp(2.4rem, 4.2vw, 3.75rem);
+}
+
 h1.brand-display {
-  margin: 0.15rem 0 0.75rem;
+  margin: 0.15rem 0 0;
   max-width: 100%;
   font-family: "Frank Ruhl Libre", "Times New Roman", serif;
   font-weight: 700;
@@ -625,6 +648,7 @@ input,
 textarea,
 select {
   width: 100%;
+  min-height: 44px;
   padding: 0.85rem 0.9rem;
   border: 1px solid var(--color-clay);
   border-radius: 0;
@@ -696,9 +720,22 @@ a:focus-visible {
   line-height: 1.45;
 }
 
+.login-photo {
+  margin: 0 0 1.25rem;
+  max-width: 36rem;
+  overflow: hidden;
+}
+
+.login-photo img {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+}
+
 .login-panels {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 36rem);
   gap: 1rem;
   margin: 1.75rem 0 1.25rem;
 }
@@ -816,6 +853,9 @@ html[lang="he"] .fulfillment legend {
 .guest-button {
   -webkit-appearance: none;
   appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   border: 1px solid var(--color-olive);
   background: transparent;
   color: var(--color-olive);
@@ -824,6 +864,33 @@ html[lang="he"] .fulfillment legend {
   cursor: pointer;
   width: 100%;
   max-width: 22rem;
+  text-decoration: none;
+  box-sizing: border-box;
+}
+
+.login .guest-button,
+.register-fold {
+  max-width: 36rem;
+}
+
+.register-fold {
+  margin-top: 1rem;
+  border: 1px solid var(--color-clay);
+  padding: 0.35rem 1rem 1rem;
+}
+
+.register-fold summary {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  font-family: var(--font-serif);
+  font-size: 1.25rem;
+}
+
+.register-fold .login-card {
+  border: 0;
+  padding: 0.85rem 0 0;
 }
 
 .guest-button:hover {
@@ -953,6 +1020,11 @@ html[lang="he"] .fulfillment legend {
 .about {
   padding-block: 2rem 3rem;
   max-width: 42rem;
+}
+
+.about a:not(.pay-button) {
+  border-bottom: 1px solid var(--color-gold);
+  text-decoration: none;
 }
 
 .about h2 {
@@ -1117,7 +1189,7 @@ html[lang="he"] .fulfillment legend {
   .hero-layout {
     grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
     gap: 3.5rem;
-    align-items: end;
+    align-items: start;
   }
 
   .hero-photo img {

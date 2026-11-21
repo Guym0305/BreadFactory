@@ -9,12 +9,12 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Frank+Ruhl+Libre:wght@500;700&family=Heebo:wght@400;500;600&family=Inter:wght@400;500;600&family=Playfair+Display:ital,wght@0,500;0,600;1,500&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/static/css/style.css?v=16">
+    <link rel="stylesheet" href="/static/css/style.css?v=21">
   </head>
   <body class="{% block body_class %}{% endblock %}">
     <a class="skip" href="#main">דילוג לתוכן</a>
     <header class="site-header shell">
-      <a class="wordmark" href="{% if current_user and current_user.is_admin %}/admin?lang=he{% elif current_user %}/?lang=he{% else %}/login?lang=he{% endif %}">לחם בהר</a>
+      <a class="wordmark" href="{% if current_user and current_user.is_admin %}/admin?lang=he{% else %}/?lang=he{% endif %}">לחם בהר</a>
       <div class="header-tools">
         {% if current_user %}
           {% if current_user.is_admin %}
@@ -31,6 +31,8 @@
           </form>
         {% else %}
           <a class="header-note" href="/about?lang=he">אודות</a>
+          <a class="header-note cart-link" href="/cart?lang=he">סל{% if cart_count %} <span class="cart-count">{{ cart_count }}</span>{% endif %}</a>
+          <a class="header-note" href="/login?lang=he">התחברות</a>
         {% endif %}
         <nav class="lang-switch" aria-label="שפה">
           <a href="{{ switch_he }}" hreflang="he" lang="he" aria-current="true">עברית</a>

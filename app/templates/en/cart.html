@@ -88,6 +88,9 @@
 
       <div class="details" id="details">
         <h2>Your delivery</h2>
+        {% if not current_user %}
+          <p class="meta"><a href="/login?lang=en&amp;next=/cart">Have an account? Sign in</a> to use your saved details.</p>
+        {% endif %}
         <label>
           <span>Full name</span>
           <input name="full_name" required maxlength="100" autocomplete="name" value="{{ saved.get('full_name', '') }}">
@@ -100,10 +103,66 @@
           <span>Email</span>
           <input name="email" type="email" required maxlength="100" autocomplete="email" value="{{ saved.get('email', '') }}">
         </label>
-        <label>
-          <span>Delivery address</span>
-          <textarea name="address" required maxlength="500" rows="3" autocomplete="street-address">{{ saved.get('address', '') }}</textarea>
-        </label>
+        {% set fulfillment = saved.get('fulfillment', 'delivery') %}
+        <fieldset class="fulfillment">
+          <legend>How you'll receive the order</legend>
+          <div class="fulfillment-choices">
+            <label class="fulfillment-choice">
+              <input type="radio" name="fulfillment" value="delivery" {% if fulfillment != 'pickup' %}checked{% endif %}>
+              <span>Delivery</span>
+            </label>
+            <label class="fulfillment-choice">
+              <input type="radio" name="fulfillment" value="pickup" {% if fulfillment == 'pickup' %}checked{% endif %}>
+              <span>Pickup</span>
+            </label>
+          </div>
+          <label class="fulfillment-panel is-delivery">
+            <span>Town</span>
+            <select name="delivery_city">
+              <option value="" {% if not saved.get('delivery_city') %}selected{% endif %} disabled>Choose a town</option>
+              {% for city in delivery_cities %}
+                <option value="{{ city.id }}" {% if saved.get('delivery_city') == city.id %}selected{% endif %}>{{ city.en }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <label class="fulfillment-panel is-delivery street-address{% if not saved.get('delivery_city') %} is-waiting{% endif %}">
+            <span>Street address</span>
+            <textarea name="street_address" maxlength="500" rows="2" autocomplete="street-address">{{ saved.get('street_address', '') }}</textarea>
+          </label>
+          <label class="fulfillment-panel is-pickup">
+            <span>Pickup point</span>
+            <select name="pickup_point">
+              <option value="" {% if not saved.get('pickup_point') %}selected{% endif %} disabled>Choose a pickup point</option>
+              {% for point in pickup_points %}
+                <option value="{{ point.id }}" {% if saved.get('pickup_point') == point.id %}selected{% endif %}>{{ point.en }}</option>
+              {% endfor %}
+            </select>
+          </label>
+        </fieldset>
+        <script>
+          (function () {
+            var form = document.currentScript.previousElementSibling;
+            var delivery = form.querySelector('select[name="delivery_city"]');
+            var pickup = form.querySelector('select[name="pickup_point"]');
+            var street = form.querySelector('textarea[name="street_address"]');
+            function sync() {
+              var isPickup = form.querySelector('input[value="pickup"]').checked;
+              var hasCity = Boolean(delivery.value);
+              delivery.disabled = isPickup;
+              pickup.disabled = !isPickup;
+              delivery.required = !isPickup;
+              pickup.required = isPickup;
+              street.disabled = isPickup || !hasCity;
+              street.required = !isPickup && hasCity;
+              street.closest("label").classList.toggle("is-waiting", !hasCity);
+            }
+            form.querySelectorAll('input[name="fulfillment"]').forEach(function (input) {
+              input.addEventListener("change", sync);
+            });
+            delivery.addEventListener("change", sync);
+            sync();
+          })();
+        </script>
         <fieldset class="pay-methods">
           <legend>How to charge</legend>
           <div class="pay-method-grid" role="radiogroup" aria-label="How to charge">

@@ -40,7 +40,7 @@ from app.services.cart import MAX_LINE, Cart, clear_cart, quantities_from_form, 
 from app.services.checkout import checkout_from_form, create_checkout
 from app.services.errors import CheckoutError
 from app.services.orders import get_order, list_customer_orders
-from app.services.places import registration_address
+from app.services.places import address_form_fields, registration_address
 from app.services.payments import apply_webhook
 from app.services.slots import (
     assert_cart_fits,
@@ -81,6 +81,10 @@ def _saved_form(form) -> dict[str, str]:
         "payment_other",
         "delivery_date",
         "lang",
+        "fulfillment",
+        "delivery_city",
+        "street_address",
+        "pickup_point",
     ):
         value = form.get(key)
         if value is not None:
@@ -138,6 +142,14 @@ def _return_path(raw: str | None, flag: str) -> str:
     encoded = urlencode(query)
     path = parts.path or "/"
     return f"{path}?{encoded}" if encoded else path
+
+
+def _shopper(request: Request, db: Session):
+    """A customer, a guest, or nobody. Administrators stay in the admin area."""
+    user = current_user(request, db)
+    if user is not None and user.is_admin:
+        return None, RedirectResponse(redirect_path("/admin"), status_code=303)
+    return user, None
 
 
 def _customer_or_redirect(request: Request, db: Session, next_path: str):
@@ -313,7 +325,9 @@ def _render_cart(
             }
         )
     if user is not None and user.customer is not None:
-        for key, value in customer_form_defaults(user.customer).items():
+        defaults = customer_form_defaults(user.customer)
+        defaults.update(address_form_fields(defaults.get("address", "")))
+        for key, value in defaults.items():
             form_saved.setdefault(key, value)
     context = {
         "lines": lines,
@@ -924,7 +938,7 @@ def admin_delivery_list(
 @router.get("/cart")
 def cart_page(request: Request, db: Session = Depends(get_db)):
     resolve_lang(request)
-    user, redirect = _customer_or_redirect(request, db, "/cart")
+    user, redirect = _shopper(request, db)
     if redirect is not None:
         return redirect
     return _render_cart(request, db, user=user)
@@ -934,7 +948,7 @@ def cart_page(request: Request, db: Session = Depends(get_db)):
 async def add_to_cart(request: Request, db: Session = Depends(get_db)):
     form = await request.form()
     _use_lang(request, _posted_lang(form))
-    user, redirect = _customer_or_redirect(request, db, "/")
+    user, redirect = _shopper(request, db)
     if redirect is not None:
         return redirect
     day = _parse_date(str(form.get("delivery_date") or ""))
@@ -977,7 +991,7 @@ async def add_to_cart(request: Request, db: Session = Depends(get_db)):
 async def choose_delivery(request: Request, db: Session = Depends(get_db)):
     form = await request.form()
     _use_lang(request, _posted_lang(form))
-    user, redirect = _customer_or_redirect(request, db, "/cart")
+    user, redirect = _shopper(request, db)
     if redirect is not None:
         return redirect
     day = _parse_date(str(form.get("delivery_date") or ""))
@@ -1012,7 +1026,7 @@ async def update_cart(request: Request, db: Session = Depends(get_db)):
     form = await request.form()
     saved = _saved_form(form)
     _use_lang(request, _posted_lang(form))
-    user, redirect = _customer_or_redirect(request, db, "/cart")
+    user, redirect = _shopper(request, db)
     if redirect is not None:
         return redirect
     day = _parse_date(saved.get("delivery_date"))
@@ -1039,7 +1053,7 @@ async def remove_from_cart(request: Request, db: Session = Depends(get_db)):
     form = await request.form()
     saved = _saved_form(form)
     _use_lang(request, _posted_lang(form))
-    user, redirect = _customer_or_redirect(request, db, "/cart")
+    user, redirect = _shopper(request, db)
     if redirect is not None:
         return redirect
     day = _parse_date(saved.get("delivery_date"))
@@ -1184,12 +1198,7 @@ def home(
 ):
     resolve_lang(request)
     user = current_user(request, db)
-    if user is None:
-        next_path = request.url.path
-        if request.url.query:
-            next_path = f"{next_path}?{request.url.query}"
-        return _login_redirect(request, next_path)
-    if user.is_admin:
+    if user is not None and user.is_admin:
         return RedirectResponse(redirect_path("/admin"), status_code=302)
     selected = _parse_date(delivery_date)
     week = "coming"
@@ -1205,13 +1214,18 @@ async def start_checkout(request: Request, db: Session = Depends(get_db)):
     saved = _saved_form(form)
     _use_lang(request, saved.get("lang"))
     user = current_user(request, db)
-    if user is None:
-        return _login_redirect(request, "/")
+    if user is not None and user.is_admin:
+        return RedirectResponse(redirect_path("/admin"), status_code=303)
+    created_guest = False
     try:
         assert_same_origin(request)
-        order = create_checkout(db, checkout_from_form(form), user=user)
+        data = checkout_from_form(form)
+        if user is None:
+            user = create_guest_user(db)
+            created_guest = True
+        order = create_checkout(db, data, user=user)
     except CheckoutError as exc:
-        return _render_cart(
+        response = _render_cart(
             request,
             db,
             error=exc.message,
@@ -1219,8 +1233,13 @@ async def start_checkout(request: Request, db: Session = Depends(get_db)):
             status_code=exc.status_code,
             user=user,
         )
+        if created_guest and user is not None:
+            set_session_user(response, user.id)
+        return response
     response = RedirectResponse(redirect_path(f"/order-success?order_id={order.order_number}"), status_code=303)
     clear_cart(response)
+    if created_guest and user is not None:
+        set_session_user(response, user.id)
     return response
 
 

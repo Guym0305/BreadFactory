@@ -4,9 +4,12 @@
 
 {% block content %}
   <section class="shell login">
+    <figure class="login-photo">
+      <img src="/static/images/catalog/country-classic.jpg" alt="כיכר מחמצת של לחם בהר" width="1400" height="1050">
+    </figure>
     <p class="kicker">חשבון</p>
-    <h1>התחברו כדי להזמין</h1>
-    <p class="lede">הירשמו פעם אחת עם הפרטים שלכם. בביקורים הבאים הפרופיל כבר יהיה שמור. או המשיכו כאורח.</p>
+    <h1>כניסה לחשבון</h1>
+    <p class="lede">הפרטים השמורים ייכנסו לסל בביקור הבא.</p>
     {% if error %}
       <p class="banner banner-error" role="alert">{{ error }}</p>
     {% endif %}
@@ -26,11 +29,15 @@
         </label>
         <button class="pay-button" type="submit">התחברות</button>
       </form>
+    </div>
 
+    <a class="guest-button" href="/?lang=he">חזרה לתפריט</a>
+
+    <details class="register-fold" {% if mode == 'register' %}open{% endif %}>
+      <summary>פעם ראשונה? צרו חשבון</summary>
       <form class="login-card" action="/register" method="post">
         <input type="hidden" name="lang" value="he">
         <input type="hidden" name="next" value="{{ next }}">
-        <h2>הרשמה</h2>
         <label>
           <span>שם משתמש</span>
           <input name="username" required maxlength="40" autocomplete="username" value="{{ saved_register.get('username', '') if mode == 'register' else '' }}">
@@ -114,13 +121,6 @@
         </script>
         <button class="pay-button" type="submit">יצירת חשבון</button>
       </form>
-    </div>
-
-    <form class="guest-card" action="/guest" method="post">
-      <input type="hidden" name="lang" value="he">
-      <input type="hidden" name="next" value="{{ next }}">
-      <p>אין צורך בחשבון.</p>
-      <button class="guest-button" type="submit">המשיכו כאורח</button>
-    </form>
+    </details>
   </section>
 {% endblock %}

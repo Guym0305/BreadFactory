@@ -41,6 +41,39 @@ _DELIVERY = {place.id: place for place in DELIVERY_CITIES}
 _PICKUP = {place.id: place for place in PICKUP_POINTS}
 
 
+def address_form_fields(address: str) -> dict[str, str]:
+    """Turn a stored delivery or pickup line back into cart form fields."""
+    text = (address or "").strip()
+    if not text or text == "-":
+        return {}
+    for marker in ("משלוח · ", "Delivery · "):
+        if text.startswith(marker):
+            place, street = _split_place(text[len(marker) :], DELIVERY_CITIES)
+            fields = {"fulfillment": "delivery", "street_address": street}
+            if place is not None:
+                fields["delivery_city"] = place.id
+            return fields
+    for marker in ("איסוף עצמי · ", "Pickup · "):
+        if text.startswith(marker):
+            place, _street = _split_place(text[len(marker) :], PICKUP_POINTS)
+            if place is None:
+                return {"fulfillment": "pickup"}
+            return {"fulfillment": "pickup", "pickup_point": place.id}
+    return {"fulfillment": "delivery", "street_address": text}
+
+
+def _split_place(rest: str, places: tuple[Place, ...]) -> tuple[Place | None, str]:
+    ranked = sorted(places, key=lambda place: max(len(place.he), len(place.en)), reverse=True)
+    for place in ranked:
+        for label in (place.he, place.en):
+            if rest == label:
+                return place, ""
+            prefix = f"{label}, "
+            if rest.startswith(prefix):
+                return place, rest[len(prefix) :]
+    return None, rest
+
+
 def registration_address(
     fulfillment: str,
     delivery_city: str,

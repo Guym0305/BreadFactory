@@ -37,7 +37,7 @@ def render(request: Request, name: str, context: dict, status_code: int = 200) -
         context["welcome_message"] = t("welcome_back", name=welcome_name)
     else:
         context.setdefault("welcome_message", None)
-    if name == "login.html":
+    if name in ("login.html", "cart.html"):
         context["delivery_cities"] = DELIVERY_CITIES
         context["pickup_points"] = PICKUP_POINTS
     context["switch_he"] = language_switch(request, "he")
