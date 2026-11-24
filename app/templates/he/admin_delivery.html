@@ -27,7 +27,7 @@
           <p>{{ order.customer.address if order.customer else "—" }}</p>
           <ul>
             {% for item in order.items %}
-              <li>{{ item.quantity }} × {{ product_label(item.product, lang) }}</li>
+              <li>{{ item.quantity }} × {{ line_title(item.product, item.variant, lang) }}</li>
             {% endfor %}
           </ul>
           <p class="admin-muted">

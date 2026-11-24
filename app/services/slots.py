@@ -10,8 +10,11 @@ from app.services.errors import CheckoutError
 
 BAKERY_TZ = ZoneInfo("Asia/Jerusalem")
 # Israeli week opens on Sunday and closes on Saturday.
-# Orders for that week close at the end of Wednesday. Delivery is Friday.
+# Orders for this Friday close on Wednesday at 20:00. Delivery is Friday.
+WEDNESDAY = 2
 THURSDAY = 3
+ORDER_CUTOFF = time(20, 0)
+ORDER_CUTOFF_LABEL = "20:00"
 DELIVERY_WINDOW = "8:00–12:00"
 WEEKDAYS = {
     "en": (
@@ -81,6 +84,7 @@ class DeliverySlot:
         self.order_weekday = names[deadline.weekday()]
         self.order_day = deadline.day
         self.order_month = months[deadline.month - 1]
+        self.order_cutoff = ORDER_CUTOFF_LABEL
 
     @property
     def available(self) -> bool:
@@ -95,6 +99,13 @@ def bakery_now() -> datetime:
     return datetime.now(BAKERY_TZ)
 
 
+def _as_bakery_time(now: datetime | None) -> datetime:
+    current = now or bakery_now()
+    if current.tzinfo is None:
+        return current.replace(tzinfo=BAKERY_TZ)
+    return current.astimezone(BAKERY_TZ)
+
+
 def delivery_datetime(day: date) -> datetime:
     return datetime(day.year, day.month, day.day, 8, 0, 0)
 
@@ -105,25 +116,27 @@ def week_sunday(day: date) -> date:
 
 
 def coming_cycle(now: datetime | None = None) -> tuple[date, date]:
-    """Wednesday order deadline and Friday delivery for the open week.
+    """Wednesday 20:00 order deadline and Friday delivery for the open week.
 
-    Thursday, Friday, and Saturday close the current week, so the coming
-    delivery is Friday of the following week.
+    From Wednesday at 20:00 through Saturday, this Friday is closed, so the
+    coming delivery is Friday of the following week.
     """
-    current = now or bakery_now()
+    current = _as_bakery_time(now)
     sunday = week_sunday(current.date())
-    if current.date().weekday() in (THURSDAY, THURSDAY + 1, THURSDAY + 2):
+    weekday = current.weekday()
+    past_cutoff = weekday == WEDNESDAY and current.time() >= ORDER_CUTOFF
+    if past_cutoff or weekday in (THURSDAY, THURSDAY + 1, THURSDAY + 2):
         sunday += timedelta(days=7)
     return sunday + timedelta(days=3), sunday + timedelta(days=5)
 
 
 def this_weeks_friday(now: datetime | None = None) -> date:
-    current = now or bakery_now()
+    current = _as_bakery_time(now)
     return week_sunday(current.date()) + timedelta(days=5)
 
 
 def ordering_closed(now: datetime | None = None) -> bool:
-    """True from Thursday on, once this Friday can no longer be ordered."""
+    """True from Wednesday at 20:00, once this Friday can no longer be ordered."""
     _, coming = coming_cycle(now)
     return coming != this_weeks_friday(now)
 

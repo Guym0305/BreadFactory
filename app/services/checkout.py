@@ -8,9 +8,11 @@ from app.schemas.order import CheckoutIn, OrderCreated
 from app.i18n import t
 from app.services.auth import assert_customer_credentials_available
 from app.services.errors import CheckoutError
+from app.services.cart import lines_from_form
 from app.services.orders import serialize_order
 from app.services.places import registration_address
 from app.services.slots import assert_cart_fits, delivery_datetime
+from app.services.variants import clean_variant
 
 
 def parse_checkout(data: dict) -> CheckoutIn:
@@ -21,24 +23,10 @@ def parse_checkout(data: dict) -> CheckoutIn:
 
 
 def checkout_from_form(form) -> CheckoutIn:
-    lines = []
-    for key, value in form.multi_items():
-        if not str(key).startswith("qty_"):
-            continue
-        raw = str(value).strip()
-        if raw in ("", "0"):
-            continue
-        try:
-            quantity = int(raw)
-        except ValueError as exc:
-            raise CheckoutError(t("whole_number")) from exc
-        if quantity < 0:
-            raise CheckoutError(t("whole_number"))
-        try:
-            product_id = int(str(key).removeprefix("qty_"))
-        except ValueError as exc:
-            raise CheckoutError(t("choose_from_bake")) from exc
-        lines.append({"product_id": product_id, "quantity": quantity})
+    lines = [
+        {"product_id": product_id, "quantity": quantity, "variant": variant or None}
+        for (product_id, variant), quantity in lines_from_form(form).items()
+    ]
 
     fulfillment = str(form.get("fulfillment") or "").strip()
     if fulfillment:
@@ -68,11 +56,10 @@ def checkout_from_form(form) -> CheckoutIn:
 
 def create_checkout(db: Session, data: CheckoutIn, user: User | None = None) -> Order:
     chosen = _priced_lines(db, data)
-    assert_cart_fits(
-        db,
-        data.delivery_date,
-        {product.id: quantity for product, quantity in chosen},
-    )
+    totals: dict[int, int] = {}
+    for product, quantity, _variant in chosen:
+        totals[product.id] = totals.get(product.id, 0) + quantity
+    assert_cart_fits(db, data.delivery_date, totals)
 
     if user is not None:
         customer = db.query(Customer).filter(Customer.id == user.customer_id).one_or_none()
@@ -99,7 +86,7 @@ def create_checkout(db: Session, data: CheckoutIn, user: User | None = None) -> 
         db.add(customer)
         db.flush()
 
-    total = round(sum(product.price * quantity for product, quantity in chosen), 2)
+    total = round(sum(product.price * quantity for product, quantity, _variant in chosen), 2)
     order = Order(
         customer_id=customer.id,
         order_number=_order_number(db, data.delivery_date),
@@ -113,13 +100,14 @@ def create_checkout(db: Session, data: CheckoutIn, user: User | None = None) -> 
     )
     db.add(order)
     db.flush()
-    for product, quantity in chosen:
+    for product, quantity, variant in chosen:
         db.add(
             OrderItem(
                 order_id=order.id,
                 product_id=product.id,
                 quantity=quantity,
                 unit_price=round(product.price, 2),
+                variant=variant,
             )
         )
     db.commit()
@@ -147,7 +135,7 @@ def _priced_lines(db: Session, data: CheckoutIn):
         product = products.get(line.product_id)
         if product is None:
             raise CheckoutError(t("unavailable"))
-        chosen.append((product, line.quantity))
+        chosen.append((product, line.quantity, clean_variant(product, line.variant)))
     return chosen
 
 

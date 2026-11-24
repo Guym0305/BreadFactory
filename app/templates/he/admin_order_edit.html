@@ -27,14 +27,24 @@
         {% for item in order.items %}
           <div class="admin-line-row">
             <input type="hidden" name="item_id" value="{{ item.id }}">
-            <label>
-              <span>מוצר</span>
-              <select name="item_product_id" required>
-                {% for product in products %}
-                  <option value="{{ product.id }}" {% if product.id == item.product_id %}selected{% endif %}>{{ product_label(product, lang) }}</option>
-                {% endfor %}
-              </select>
-            </label>
+            <div class="admin-line-product">
+              <label>
+                <span>מוצר</span>
+                <select name="item_product_id" required>
+                  {% for product in products %}
+                    <option value="{{ product.id }}" {% if product.id == item.product_id %}selected{% endif %}>{{ product_label(product, lang) }}</option>
+                  {% endfor %}
+                </select>
+              </label>
+              <label>
+                <span>גרסה</span>
+                <select name="item_variant">
+                  <option value="">—</option>
+                  <option value="regular" {% if item.variant == 'regular' %}selected{% endif %}>רגילה</option>
+                  <option value="vegan" {% if item.variant == 'vegan' %}selected{% endif %}>טבעונית</option>
+                </select>
+              </label>
+            </div>
             <label>
               <span>כמות</span>
               <input name="item_quantity" type="number" min="1" max="99" required value="{{ item.quantity }}">
@@ -50,15 +60,25 @@
           </div>
         {% endfor %}
         <div class="admin-line-row admin-line-new">
-          <label>
-            <span>הוספת מוצר</span>
-            <select name="new_product_id">
-              <option value="">—</option>
-              {% for product in products %}
-                <option value="{{ product.id }}">{{ product_label(product, lang) }}</option>
-              {% endfor %}
-            </select>
-          </label>
+          <div class="admin-line-product">
+            <label>
+              <span>הוספת מוצר</span>
+              <select name="new_product_id">
+                <option value="">—</option>
+                {% for product in products %}
+                  <option value="{{ product.id }}">{{ product_label(product, lang) }}</option>
+                {% endfor %}
+              </select>
+            </label>
+            <label>
+              <span>גרסה</span>
+              <select name="new_variant">
+                <option value="">—</option>
+                <option value="regular">רגילה</option>
+                <option value="vegan">טבעונית</option>
+              </select>
+            </label>
+          </div>
           <label>
             <span>כמות</span>
             <input name="new_quantity" type="number" min="1" max="99" value="1">

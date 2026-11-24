@@ -10,6 +10,7 @@ from app.services.auth import WELCOME_COOKIE, consume_login_welcome
 from app.services.cart import read_cart
 from app.services.places import DELIVERY_CITIES, PICKUP_POINTS
 from app.services.slots import DELIVERY_WINDOW, MONTHS, WEEKDAYS
+from app.services.variants import line_title, offers_version, variant_label
 
 PAYMENT_LABEL_KEYS = {
     "bit": "pay_bit",
@@ -82,6 +83,9 @@ templates.env.filters["delivery_label"] = delivery_label
 templates.env.filters["payment_label"] = payment_label
 templates.env.globals["delivery_window"] = DELIVERY_WINDOW
 templates.env.globals["payment_label"] = payment_label
+templates.env.globals["offers_version"] = offers_version
+templates.env.globals["variant_label"] = variant_label
+templates.env.globals["line_title"] = line_title
 
 
 def redirect_path(path: str, lang: str | None = None) -> str:

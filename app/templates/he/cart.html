@@ -35,7 +35,7 @@
               <label class="delivery-option">
                 <input type="radio" name="delivery_date" value="{{ choice.slot.date }}" {% if choice.slot.date == selected_delivery %}checked{% endif %}>
                 <span>
-                  <span class="week-label">{% if choice.key == 'coming' %}המשלוח הקרוב{% else %}המשלוח הבא{% endif %}</span>
+                  <span class="week-label">{% if choice.key == 'coming' %}יום שישי הזה{% else %}יום שישי שאחריו{% endif %}</span>
                   <span class="week-date">{{ choice.slot.weekday }}</span>
                   <span>{{ choice.slot.day }} ב{{ choice.slot.month }}</span>
                 </span>
@@ -43,16 +43,21 @@
             {% endfor %}
           </div>
         </fieldset>
-        <button class="text-button" type="submit">בחירת משלוח</button>
+        <button class="text-button" type="submit">שמירת מועד המשלוח</button>
       </form>
     {% endif %}
     {% if not lines %}
-      <p class="cart-empty">הסל ריק. <a href="/?lang=he">בחרו כיכר</a> מהאפייה של השבוע.</p>
+      <div class="cart-empty">
+        <p>הסל ריק.</p>
+        <p>אפשר לשלוח הזמנה בלי חשבון. <a href="/login?lang=he&amp;next=/cart">יש חשבון? התחברו</a> כדי למלא את הפרטים השמורים.</p>
+        <p><a class="pay-button" href="/?lang=he#the-bake">למבחר השבוע</a></p>
+      </div>
     {% elif slot %}
-      <p class="meta">{{ slot.label }} · {{ slot.window }} · {% if slot.remaining == 1 %}נותרה כיכר אחת{% else %}נותרו {{ slot.remaining }} כיכרות{% endif %}</p>
+      <p class="meta">{{ slot.label }} · {{ slot.window }}</p>
     {% endif %}
 
-    <form class="order-form" action="/checkout" method="post" data-remaining="{{ slot.remaining if slot else 0 }}" data-one-loaf="כיכר אחת" data-many-loaves="{n} כיכרות" data-choose-loaf="בחרו לפחות כיכר אחת." data-choose-payment="בחרו איך תשלמו." data-enter-payment-other="הזינו איך תשלמו.">
+    {% if lines %}
+    <form class="order-form" action="/checkout" method="post" data-remaining="{{ slot.remaining if slot else 0 }}" data-one-loaf="כיכר אחת" data-many-loaves="{n} כיכרות" data-choose-loaf="בחרו לפחות כיכר אחת." data-choose-payment="בחרו איך תשלמו." data-enter-payment-other="הזינו איך תשלמו." data-delivery-label="משלוח" data-pickup-label="איסוף עצמי">
       <button class="pay-button cart-default-submit" type="submit" tabindex="-1" aria-hidden="true">שליחת הזמנה</button>
       <input type="hidden" name="lang" value="he">
       <input type="hidden" name="delivery_date" value="{{ slot.date if slot else delivery_date }}">
@@ -62,18 +67,23 @@
           {% for line in lines %}
             <article class="cart-line">
               <figure>
-                <img src="{{ line.product.image_url }}" alt="פנים הכיכר והקרום של {{ line.product.name_he }}" width="400" height="400">
+                <img src="{{ line.product.image_url }}" alt="תצלום של {{ line.product.name_he }}" width="400" height="400">
               </figure>
               <div>
                 <h3>{{ line.product.name_he }}</h3>
+                {% if line.variant %}<p class="meta">{{ variant_label(line.variant, lang) }}</p>{% endif %}
                 <p class="price">{{ line.product.price|money }}</p>
                 <div class="cart-line-actions">
                   <div class="qty">
-                    <button type="button" class="step" data-dir="-1" aria-label="הסרת כיכר אחת של {{ line.product.name_he }}">−</button>
-                    <input class="qty-input" type="number" name="qty_{{ line.product.id }}" value="{{ line.quantity }}" min="0" max="{{ line.max_quantity }}" inputmode="numeric" data-price="{{ line.product.price }}" data-counts="{{ 1 if line.product.counts_toward_capacity else 0 }}" aria-label="כמות של {{ line.product.name_he }}">
-                    <button type="button" class="step" data-dir="1" aria-label="הוספת כיכר אחת של {{ line.product.name_he }}">+</button>
+                    <button type="button" class="step" data-dir="-1" aria-label="הפחתה של {{ line_title(line.product, line.variant, lang) }}">−</button>
+                    <input class="qty-input" type="number" name="qty_{{ line.product.id }}{% if line.variant %}_{{ line.variant }}{% endif %}" value="{{ line.quantity }}" min="0" max="{{ line.max_quantity }}" inputmode="numeric" data-price="{{ line.product.price }}" data-name="{{ line_title(line.product, line.variant, lang) }}" data-saved="{{ line.quantity }}" data-counts="{{ 1 if line.product.counts_toward_capacity else 0 }}" aria-label="כמות של {{ line_title(line.product, line.variant, lang) }}">
+                    <button type="button" class="step" data-dir="1" aria-label="הוספה של {{ line_title(line.product, line.variant, lang) }}">+</button>
                   </div>
-                  <button class="text-button" type="submit" formaction="/cart/remove" formnovalidate name="product_id" value="{{ line.product.id }}" data-skip-validate="true">הסרה</button>
+                  {% if line.variant %}
+                    <button class="text-button" type="submit" formaction="/cart/remove" formnovalidate name="remove_line" value="{{ line.product.id }}@{{ line.variant }}" data-skip-validate="true">הסרה</button>
+                  {% else %}
+                    <button class="text-button" type="submit" formaction="/cart/remove" formnovalidate name="product_id" value="{{ line.product.id }}" data-skip-validate="true">הסרה</button>
+                  {% endif %}
                 </div>
               </div>
             </article>
@@ -84,12 +94,14 @@
           <p><span data-total>₪0</span></p>
           <button class="text-button" type="submit" formaction="/cart/update" formnovalidate data-skip-validate="true">עדכון הסל</button>
         </div>
+        <p class="cart-pending" data-cart-pending hidden>הסכום מתעדכן לפי העריכה. שליחת ההזמנה משתמשת בכמויות שמוצגות. עדכון הסל שומר אותן אם יוצאים מהעמוד.</p>
       {% endif %}
 
+      {% if lines %}
       <div class="details" id="details">
-        <h2>פרטי המשלוח</h2>
+        <h2>יצירת קשר</h2>
         {% if not current_user %}
-          <p class="meta"><a href="/login?lang=he&amp;next=/cart">יש חשבון? התחברו</a> כדי למלא את הפרטים השמורים.</p>
+          <p class="meta">אפשר לשלוח הזמנה בלי חשבון. <a href="/login?lang=he&amp;next=/cart">יש חשבון? התחברו</a> כדי למלא את הפרטים השמורים.</p>
         {% endif %}
         <label>
           <span>שם מלא</span>
@@ -164,8 +176,9 @@
           })();
         </script>
         <fieldset class="pay-methods">
-          <legend>איך לחייב</legend>
-          <div class="pay-method-grid" role="radiogroup" aria-label="איך לחייב">
+          <legend>אמצעי תשלום</legend>
+          <p class="meta">בחרו איך תשלמו. השליחה רושמת את ההזמנה ואת אופן התשלום. פרטי כרטיס לא נאספים כאן.</p>
+          <div class="pay-method-grid" role="radiogroup" aria-label="אמצעי תשלום">
             <label class="pay-method">
               <input type="radio" name="payment_method" value="bit" {% if saved.get('payment_method') == 'bit' %}checked{% endif %}>
               <span class="pay-method-face">
@@ -211,9 +224,23 @@
           <span>הערות <em>רשות</em></span>
           <textarea name="notes" maxlength="1000" rows="2">{{ saved.get('notes', '') }}</textarea>
         </label>
+        <div class="order-recap">
+          <h2>סיכום ההזמנה</h2>
+          <ul class="recap-lines" data-recap-lines>
+            {% for line in lines %}
+              <li>{{ line.quantity }} × {{ line_title(line.product, line.variant, lang) }}</li>
+            {% endfor %}
+          </ul>
+          <p><span data-count>0 כיכרות</span> · <span data-total>₪0</span></p>
+          <p data-fulfillment>{% if saved.get('fulfillment') == 'pickup' %}איסוף עצמי{% else %}משלוח{% endif %}</p>
+          {% if slot %}<p>{{ slot.label }} · {{ slot.window }}</p>{% endif %}
+          <p class="meta">המשלוח והאיסוף ללא עלות. השליחה מאשרת את ההזמנה ליום שישי הזה. התשלום לפי האמצעי שנבחר, ובלי פרטי כרטיס בטופס.</p>
+        </div>
         <p class="form-message" id="order-message" role="alert"></p>
         <button class="pay-button" type="submit">שליחת הזמנה</button>
       </div>
+      {% endif %}
     </form>
+    {% endif %}
   </section>
 {% endblock %}

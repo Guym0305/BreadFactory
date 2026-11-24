@@ -10,6 +10,7 @@ from app.database import get_db
 from app.i18n import get_lang, resolve_lang, set_lang, t
 from app.models.bakery import OrderStatus, Product
 from app.security import assert_same_origin
+from app.seed import sort_catalog
 from app.services.admin import (
     delete_user,
     delivery_dates,
@@ -36,7 +37,18 @@ from app.services.auth import (
     set_login_welcome,
     set_session_user,
 )
-from app.services.cart import MAX_LINE, Cart, clear_cart, quantities_from_form, read_cart, write_cart
+from app.services.cart import (
+    MAX_LINE,
+    Cart,
+    clear_cart,
+    lines_from_form,
+    lines_from_mapping,
+    normalize_lines,
+    read_cart,
+    totals_from_lines,
+    write_cart,
+)
+from app.services.variants import VARIANTS, line_title, offers_version
 from app.services.checkout import checkout_from_form, create_checkout
 from app.services.errors import CheckoutError
 from app.services.orders import get_order, list_customer_orders
@@ -132,16 +144,23 @@ def _require_admin(request: Request, db: Session):
     return user, None
 
 
-def _return_path(raw: str | None, flag: str) -> str:
+def _return_path(raw: str | None, flag: str, extra: dict | None = None) -> str:
     safe = _next_path(None if raw is None else str(raw))
     parts = urlsplit(safe)
     query = dict(parse_qsl(parts.query, keep_blank_values=True))
     query.pop("added", None)
+    query.pop("added_product", None)
     query.pop("replaced", None)
     query[flag] = "1"
+    if extra:
+        for key, value in extra.items():
+            query[key] = value
     encoded = urlencode(query)
     path = parts.path or "/"
-    return f"{path}?{encoded}" if encoded else path
+    target = f"{path}?{encoded}" if encoded else path
+    if parts.fragment:
+        target = f"{target}#{parts.fragment}"
+    return target
 
 
 def _shopper(request: Request, db: Session):
@@ -213,6 +232,19 @@ def _product_rooms(db: Session, products: list[Product], cart_quantities: dict[i
     return rooms, spare == 0 and cart_counted > 0
 
 
+def _ordered_out(db: Session, products: list[Product], slot, day: date | None) -> dict[int, bool]:
+    """True when placed orders, not the open cart, have used up a product."""
+    if slot is None or day is None:
+        return {}
+    taken = reserved_product_quantities(db, day)
+    sold_out: dict[int, bool] = {}
+    for product in products:
+        limit_gone = product.delivery_limit is not None and taken.get(product.id, 0) >= product.delivery_limit
+        bake_gone = bool(product.counts_toward_capacity) and slot.remaining <= 0
+        sold_out[product.id] = limit_gone or bake_gone
+    return sold_out
+
+
 def _posted_lang(form) -> str | None:
     posted = form.get("lang")
     return str(posted) if posted else None
@@ -238,19 +270,11 @@ def _product_id(raw) -> int:
     return product_id
 
 
-def _posted_quantities(form_saved: dict) -> dict[int, int]:
-    quantities: dict[int, int] = {}
-    for key, value in form_saved.items():
-        if not str(key).startswith("qty_"):
-            continue
-        raw = str(value).strip()
-        if raw in ("", "0"):
-            continue
-        try:
-            quantities[int(str(key).removeprefix("qty_"))] = int(raw)
-        except ValueError:
-            continue
-    return quantities
+def _cart_lines(raw_lines: dict, db: Session) -> tuple[dict, dict[int, int], dict[int, Product]]:
+    product_ids = [product_id for product_id, _variant in raw_lines]
+    products = _active_products(db, product_ids)
+    lines = normalize_lines(raw_lines, products)
+    return lines, totals_from_lines(lines), products
 
 
 def _slot_for_day(db: Session, day: date, lang: str):
@@ -300,9 +324,10 @@ def _render_cart(
     if posted_day in allowed:
         selected = posted_day
     if any(str(key).startswith("qty_") for key in form_saved):
-        quantities = _posted_quantities(form_saved)
+        raw_lines = lines_from_mapping(form_saved)
     else:
-        quantities = dict(cart.quantities)
+        raw_lines = dict(cart.lines)
+    raw_lines, quantities, products = _cart_lines(raw_lines, db)
     slot = None
     week = "coming"
     for choice in choices:
@@ -310,18 +335,24 @@ def _render_cart(
             slot = choice["slot"]
             week = "next" if choice["key"] == "next" else "coming"
             break
-    products = _active_products(db, list(quantities))
     line_caps = _line_caps(db, slot, quantities, products)
+    version_order = {"": 0, "regular": 1, "vegan": 2}
     lines = []
-    for product_id, quantity in sorted(quantities.items()):
+    for (product_id, variant), quantity in sorted(
+        raw_lines.items(),
+        key=lambda item: (item[0][0], version_order.get(item[0][1], 9)),
+    ):
         product = products.get(product_id)
         if product is None or quantity <= 0:
             continue
+        product_cap = line_caps.get(product_id, quantity)
+        shared_spare = max(product_cap - quantities.get(product_id, quantity), 0)
         lines.append(
             {
                 "product": product,
                 "quantity": quantity,
-                "max_quantity": line_caps.get(product_id, quantity),
+                "variant": variant,
+                "max_quantity": quantity + shared_spare,
             }
         )
     if user is not None and user.customer is not None:
@@ -368,7 +399,9 @@ def _render_home(
     show_bake = slot is not None
     products = []
     if show_bake:
-        products = db.query(Product).filter(Product.is_active.is_(True)).order_by(Product.id).all()
+        products = sort_catalog(
+            db.query(Product).filter(Product.is_active.is_(True)).all()
+        )
     form_saved = dict(saved or {})
     if user is not None and user.customer is not None:
         for key, value in customer_form_defaults(user.customer).items():
@@ -382,6 +415,7 @@ def _render_home(
     cart_held = sum(cart_quantities.values())
     limit = allowed.get(target) if target in allowed else visible_slot
     product_room, cart_holds_bake = _product_rooms(db, products, cart_quantities, limit, target)
+    product_sold_out = _ordered_out(db, products, limit, target)
     context = {
         "slots": slots,
         "products": products,
@@ -394,9 +428,11 @@ def _render_home(
         "cart_quantities": cart_quantities,
         "cart_held": cart_held,
         "product_room": product_room,
+        "product_sold_out": product_sold_out,
         "bake_full": visible_slot is not None and visible_slot.remaining <= 0,
         "cart_holds_bake": cart_holds_bake,
         "added": request.query_params.get("added") == "1" and error is None,
+        "added_product": _product_id(request.query_params.get("added_product")) if str(request.query_params.get("added_product") or "").isdigit() else None,
         "deadline_closed": deadline_closed,
     }
     return render(request, "index.html", context, status_code=status_code)
@@ -610,16 +646,22 @@ def _parse_order_lines(form) -> list[dict]:
     quantities = [str(value) for value in form.getlist("item_quantity")]
     prices = [str(value) for value in form.getlist("item_unit_price")]
     remove_ids = {str(value) for value in form.getlist("item_remove")}
+    variants = [str(value) for value in form.getlist("item_variant")]
     if not (len(item_ids) == len(product_ids) == len(quantities) == len(prices)):
         raise CheckoutError(t("admin_bad_line"))
+    use_variants = len(variants) == len(item_ids)
     lines: list[dict] = []
-    for item_id, product_id, quantity, price in zip(item_ids, product_ids, quantities, prices):
+    for index, (item_id, product_id, quantity, price) in enumerate(
+        zip(item_ids, product_ids, quantities, prices)
+    ):
         lines.append(
             {
                 "id": int(item_id) if item_id.isdigit() else None,
                 "product_id": product_id,
                 "quantity": quantity,
                 "unit_price": price,
+                "variant": variants[index] if use_variants else "",
+                "set_variant": use_variants,
                 "remove": item_id in remove_ids,
             }
         )
@@ -637,6 +679,8 @@ def _parse_order_lines(form) -> list[dict]:
                 "product_id": product_id,
                 "quantity": new_quantity or "1",
                 "unit_price": new_price,
+                "variant": str(form.get("new_variant") or ""),
+                "set_variant": True,
                 "remove": False,
             }
         )
@@ -968,10 +1012,16 @@ async def add_to_cart(request: Request, db: Session = Depends(get_db)):
             if not choices:
                 raise CheckoutError(t("choose_morning"))
             day = choices[0]["slot"].date
-        quantities = dict(cart.quantities)
-        quantities[product_id] = quantities.get(product_id, 0) + quantity
+        held = _active_products(db, [pid for pid, _variant in cart.lines] + [product_id])
+        lines = normalize_lines(dict(cart.lines), held)
+        raw_variant = str(form.get("variant") or "").strip().lower()
+        variant = raw_variant if offers_version(products[product_id]) and raw_variant in VARIANTS else ""
+        if offers_version(products[product_id]) and not variant:
+            variant = "regular"
+        lines[(product_id, variant)] = min(lines.get((product_id, variant), 0) + quantity, MAX_LINE)
+        quantities = totals_from_lines(lines)
         assert_cart_fits(db, day, quantities)
-        cart = Cart(day, quantities)
+        cart = Cart(day, quantities, lines)
     except CheckoutError as exc:
         return _render_home(
             request,
@@ -982,7 +1032,10 @@ async def add_to_cart(request: Request, db: Session = Depends(get_db)):
             week="coming",
             user=user,
         )
-    response = RedirectResponse(_return_path(form.get("next"), "added"), status_code=303)
+    response = RedirectResponse(
+        _return_path(form.get("next"), "added", {"added_product": str(product_id)}),
+        status_code=303,
+    )
     write_cart(response, cart)
     return response
 
@@ -1006,8 +1059,9 @@ async def choose_delivery(request: Request, db: Session = Depends(get_db)):
     except CheckoutError as exc:
         saved = _saved_form(form)
         saved["delivery_date"] = cart.delivery_date.isoformat() if cart.delivery_date else ""
-        for product_id, quantity in cart.quantities.items():
-            saved[f"qty_{product_id}"] = str(quantity)
+        for (product_id, variant), quantity in cart.lines.items():
+            suffix = f"_{variant}" if variant else ""
+            saved[f"qty_{product_id}{suffix}"] = str(quantity)
         return _render_cart(
             request,
             db,
@@ -1017,7 +1071,7 @@ async def choose_delivery(request: Request, db: Session = Depends(get_db)):
             user=user,
         )
     response = RedirectResponse(redirect_path("/cart"), status_code=303)
-    write_cart(response, Cart(day, dict(cart.quantities)))
+    write_cart(response, Cart(day, dict(cart.quantities), dict(cart.lines)))
     return response
 
 
@@ -1032,7 +1086,7 @@ async def update_cart(request: Request, db: Session = Depends(get_db)):
     day = _parse_date(saved.get("delivery_date"))
     try:
         assert_same_origin(request)
-        quantities = quantities_from_form(form)
+        lines, quantities, _products = _cart_lines(lines_from_form(form), db)
         assert_cart_fits(db, day, quantities)
     except CheckoutError as exc:
         return _render_cart(
@@ -1044,7 +1098,7 @@ async def update_cart(request: Request, db: Session = Depends(get_db)):
             user=user,
         )
     response = RedirectResponse(redirect_path("/cart"), status_code=303)
-    write_cart(response, Cart(day if quantities else None, quantities))
+    write_cart(response, Cart(day if quantities else None, quantities, lines))
     return response
 
 
@@ -1059,9 +1113,17 @@ async def remove_from_cart(request: Request, db: Session = Depends(get_db)):
     day = _parse_date(saved.get("delivery_date"))
     try:
         assert_same_origin(request)
-        product_id = _product_id(form.get("product_id"))
-        quantities = quantities_from_form(form)
-        quantities.pop(product_id, None)
+        lines = lines_from_form(form)
+        remove_line = str(form.get("remove_line") or "")
+        if remove_line:
+            pid_part, _, variant = remove_line.partition("@")
+            product_id = _product_id(pid_part)
+            variant = variant if variant in VARIANTS else ""
+            lines.pop((product_id, variant), None)
+        else:
+            product_id = _product_id(form.get("product_id"))
+            lines = {key: qty for key, qty in lines.items() if key[0] != product_id}
+        lines, quantities, _products = _cart_lines(lines, db)
         assert_cart_fits(db, day, quantities)
     except CheckoutError as exc:
         return _render_cart(
@@ -1073,7 +1135,7 @@ async def remove_from_cart(request: Request, db: Session = Depends(get_db)):
             user=user,
         )
     response = RedirectResponse(redirect_path("/cart"), status_code=303)
-    write_cart(response, Cart(day if quantities else None, quantities))
+    write_cart(response, Cart(day if quantities else None, quantities, lines))
     return response
 
 
@@ -1100,13 +1162,9 @@ def _history_rows(db: Session, user, lang: str) -> list[dict]:
         lines = []
         for item in order.items:
             product = item.product
-            if lang == "he":
-                name = (product.name_he or product.name) if product is not None else "לחם"
-            else:
-                name = (product.name_en or product.name) if product is not None else "Loaf"
             lines.append(
                 {
-                    "name": name,
+                    "name": line_title(product, item.variant, lang),
                     "quantity": item.quantity,
                     "total": round(item.quantity * item.unit_price, 2),
                 }
@@ -1160,13 +1218,19 @@ async def reorder(request: Request, order_number: str, db: Session = Depends(get
     try:
         assert_same_origin(request)
         active = _active_products(db, [item.product_id for item in order.items])
-        additions: dict[int, int] = {}
+        additions: dict[tuple[int, str], int] = {}
         skipped = False
         for item in order.items:
             if item.product_id not in active or item.quantity < 1:
                 skipped = True
                 continue
-            additions[item.product_id] = additions.get(item.product_id, 0) + item.quantity
+            variant = item.variant if item.variant in VARIANTS else ""
+            if offers_version(active[item.product_id]):
+                variant = variant or "regular"
+            else:
+                variant = ""
+            key = (item.product_id, variant)
+            additions[key] = min(additions.get(key, 0) + item.quantity, MAX_LINE)
         if not additions:
             raise CheckoutError(t("reorder_unavailable"))
         cart = read_cart(request)
@@ -1178,15 +1242,17 @@ async def reorder(request: Request, order_number: str, db: Session = Depends(get
             day = choices[0]["slot"].date
         else:
             raise CheckoutError(t("choose_morning"))
-        quantities = dict(cart.quantities)
-        for product_id, quantity in additions.items():
-            quantities[product_id] = min(quantities.get(product_id, 0) + quantity, MAX_LINE)
+        held_ids = [pid for pid, _variant in cart.lines] + [pid for pid, _variant in additions]
+        lines = normalize_lines(dict(cart.lines), _active_products(db, held_ids))
+        for key, quantity in additions.items():
+            lines[key] = min(lines.get(key, 0) + quantity, MAX_LINE)
+        quantities = totals_from_lines(lines)
         assert_cart_fits(db, day, quantities)
     except CheckoutError as exc:
         return _render_orders(request, db, user, error=exc.message, status_code=exc.status_code)
     query = "reordered=1&skipped=1" if skipped else "reordered=1"
     response = RedirectResponse(redirect_path(f"/cart?{query}"), status_code=303)
-    write_cart(response, Cart(day, quantities))
+    write_cart(response, Cart(day, quantities, lines))
     return response
 
 

@@ -9,29 +9,43 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Frank+Ruhl+Libre:wght@500;700&family=Heebo:wght@400;500;600&family=Inter:wght@400;500;600&family=Playfair+Display:ital,wght@0,500;0,600;1,500&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/static/css/style.css?v=21">
+    <link rel="stylesheet" href="/static/css/style.css?v=39">
   </head>
   <body class="{% block body_class %}{% endblock %}">
     <a class="skip" href="#main">דילוג לתוכן</a>
     <header class="site-header shell">
-      <a class="wordmark" href="{% if current_user and current_user.is_admin %}/admin?lang=he{% else %}/?lang=he{% endif %}">לחם בהר</a>
-      <div class="header-tools">
-        {% if current_user %}
-          {% if current_user.is_admin %}
+      <div class="header-brand">
+        <a class="wordmark" href="{% if current_user and current_user.is_admin %}/admin?lang=he{% else %}/?lang=he{% endif %}">לחם בהר</a>
+        <nav class="header-nav" aria-label="תפריט">
+          {% if current_user and current_user.is_admin %}
             <a class="header-note" href="/admin?lang=he">ניהול</a>
           {% else %}
-            <a class="header-note" href="/about?lang=he">אודות</a>
-            <a class="header-note" href="/orders?lang=he">ההזמנות שלי</a>
-            <a class="header-note cart-link" href="/cart?lang=he">סל{% if cart_count %} <span class="cart-count">{{ cart_count }}</span>{% endif %}</a>
+            <a class="header-note" href="/?lang=he#the-bake">תפריט</a>
+            <a class="header-note" href="/about?lang=he" {% if request.url.path == '/about' %}aria-current="page"{% endif %}>אודות</a>
+            {% if current_user %}
+              <a class="header-note" href="/orders?lang=he" {% if request.url.path == '/orders' %}aria-current="page"{% endif %}>ההזמנות שלי</a>
+            {% endif %}
           {% endif %}
+        </nav>
+      </div>
+      <div class="header-tools">
+        {% if not current_user or not current_user.is_admin %}
+          <a class="header-note cart-link" href="/cart?lang=he" {% if request.url.path == '/cart' %}aria-current="page"{% endif %}>
+            <svg class="cart-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" d="M6.5 7h14l-1.4 8.5H8L6 4H3"/>
+              <circle cx="9" cy="20" r="1.35" fill="currentColor" stroke="none"/>
+              <circle cx="17.5" cy="20" r="1.35" fill="currentColor" stroke="none"/>
+            </svg>
+            <span>סל</span>{% if cart_count %} <span class="cart-count">{{ cart_count }}</span>{% endif %}
+          </a>
+        {% endif %}
+        {% if current_user %}
           <span class="account-chip">{% if current_user.is_guest %}אורח{% else %}{{ current_user.username }}{% endif %}</span>
           <form class="logout-form" action="/logout" method="post">
             <input type="hidden" name="lang" value="he">
             <button type="submit">יציאה</button>
           </form>
         {% else %}
-          <a class="header-note" href="/about?lang=he">אודות</a>
-          <a class="header-note cart-link" href="/cart?lang=he">סל{% if cart_count %} <span class="cart-count">{{ cart_count }}</span>{% endif %}</a>
           <a class="header-note" href="/login?lang=he">התחברות</a>
         {% endif %}
         <nav class="lang-switch" aria-label="שפה">
@@ -46,6 +60,6 @@
     <footer class="site-footer shell">
       <p><span class="brand-inline">לחם בהר</span> · נאפה לפי הזמנה</p>
     </footer>
-    <script src="/static/js/checkout.js?v=16"></script>
+    <script src="/static/js/checkout.js?v=18"></script>
   </body>
 </html>

@@ -5,6 +5,7 @@ from app.database import get_db
 from app.i18n import get_lang, resolve_lang
 from app.models.bakery import Product
 from app.schemas.product import ProductOut, SlotOut
+from app.seed import sort_catalog
 from app.services.slots import list_slots
 
 router = APIRouter(prefix="/api/v1", tags=["catalog"])
@@ -12,8 +13,8 @@ router = APIRouter(prefix="/api/v1", tags=["catalog"])
 
 @router.get("/products", response_model=list[ProductOut])
 def products(db: Session = Depends(get_db)):
-    rows = db.query(Product).filter(Product.is_active.is_(True)).order_by(Product.id).all()
-    return rows
+    rows = db.query(Product).filter(Product.is_active.is_(True)).all()
+    return sort_catalog(rows)
 
 
 @router.get("/slots", response_model=list[SlotOut])

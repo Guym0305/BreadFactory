@@ -13,6 +13,19 @@ PAYMENT_METHODS = ("bit", "paybox", "bank_transfer", "cash", "other")
 class OrderLineIn(BaseModel):
     product_id: int
     quantity: int = Field(gt=0, le=30)
+    variant: str | None = None
+
+    @field_validator("variant")
+    @classmethod
+    def optional_variant(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        cleaned = value.strip().lower()
+        if not cleaned:
+            return None
+        if cleaned not in ("regular", "vegan"):
+            raise ValueError(t("choose_from_bake"))
+        return cleaned
 
 
 class CheckoutIn(BaseModel):

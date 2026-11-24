@@ -104,6 +104,7 @@ class OrderItem(Base):
     product_id = Column(Integer, ForeignKey("products.id"), nullable=False, index=True)
     quantity = Column(Integer, nullable=False)
     unit_price = Column(Float, nullable=False)
+    variant = Column(String(16), nullable=True)
 
     order = relationship("Order", back_populates="items")
     product = relationship("Product")

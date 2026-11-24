@@ -5,9 +5,11 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.i18n import t
 from app.models.bakery import Customer, Order, OrderItem, OrderStatus, Product, User
+from app.seed import sort_catalog
 from app.services.auth import hash_password
 from app.services.errors import CheckoutError
 from app.services.slots import cycle_for
+from app.services.variants import clean_variant
 
 
 EDITABLE_ORDER_STATUSES = {
@@ -85,6 +87,8 @@ def _apply_order_lines(db: Session, order: Order, lines: list[dict[str, Any]]) -
             item.product_id = product_id
             item.quantity = quantity
             item.unit_price = unit_price
+            if row.get("set_variant"):
+                item.variant = clean_variant(product, row.get("variant"))
             keep_ids.add(item.id)
         else:
             item = OrderItem(
@@ -92,6 +96,7 @@ def _apply_order_lines(db: Session, order: Order, lines: list[dict[str, Any]]) -
                 product_id=product_id,
                 quantity=quantity,
                 unit_price=unit_price,
+                variant=clean_variant(product, row.get("variant")),
             )
             db.add(item)
             db.flush()
@@ -139,7 +144,7 @@ def update_order(
 
 
 def list_products(db: Session) -> list[Product]:
-    return db.query(Product).order_by(Product.id).all()
+    return sort_catalog(db.query(Product).all())
 
 
 def get_admin_product(db: Session, product_id: int) -> Product:

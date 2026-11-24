@@ -3,8 +3,9 @@
   if (form) {
     const remaining = Number(form.dataset.remaining || 0);
     const inputs = Array.from(form.querySelectorAll(".qty-input"));
-    const total = document.querySelector("[data-total]");
-    const count = document.querySelector("[data-count]");
+    const totals = Array.from(document.querySelectorAll("[data-total]"));
+    const counts = Array.from(document.querySelectorAll("[data-count]"));
+    const pending = document.querySelector("[data-cart-pending]");
     const message = document.querySelector("#order-message");
     const paymentInputs = Array.from(form.querySelectorAll('input[name="payment_method"]'));
     const otherWrap = form.querySelector("[data-pay-other]");
@@ -49,13 +50,39 @@
       inputs.forEach((input) => {
         amount += Number(input.dataset.price) * valueOf(input);
       });
-      if (count) {
-        const one = form.dataset.oneLoaf || "1 loaf";
-        const many = form.dataset.manyLoaves || "{n} loaves";
-        count.textContent = loaves === 1 ? one : many.replaceAll("{n}", String(loaves));
+      const one = form.dataset.oneLoaf || "1 loaf";
+      const many = form.dataset.manyLoaves || "{n} loaves";
+      const countText = loaves === 1 ? one : many.replaceAll("{n}", String(loaves));
+      const totalText = `₪${Number.isInteger(amount) ? amount.toFixed(0) : amount.toFixed(2)}`;
+      counts.forEach((node) => {
+        node.textContent = countText;
+      });
+      totals.forEach((node) => {
+        node.textContent = totalText;
+      });
+      if (pending) {
+        const dirty = inputs.some((input) => String(valueOf(input)) !== String(input.dataset.saved ?? input.value));
+        pending.hidden = !dirty;
       }
-      if (total) {
-        total.textContent = `₪${Number.isInteger(amount) ? amount.toFixed(0) : amount.toFixed(2)}`;
+      const recap = document.querySelector("[data-recap-lines]");
+      if (recap) {
+        recap.replaceChildren();
+        inputs.forEach((input) => {
+          const qty = valueOf(input);
+          if (qty < 1 || !input.dataset.name) {
+            return;
+          }
+          const item = document.createElement("li");
+          item.textContent = `${qty} × ${input.dataset.name}`;
+          recap.appendChild(item);
+        });
+      }
+      const fulfillment = document.querySelector("[data-fulfillment]");
+      if (fulfillment) {
+        const pickup = form.querySelector('input[name="fulfillment"][value="pickup"]');
+        fulfillment.textContent = pickup && pickup.checked
+          ? form.dataset.pickupLabel || "Pickup"
+          : form.dataset.deliveryLabel || "Delivery";
       }
     };
 
@@ -95,6 +122,10 @@
 
     paymentInputs.forEach((input) => {
       input.addEventListener("change", syncPaymentOther);
+    });
+
+    form.querySelectorAll('input[name="fulfillment"]').forEach((input) => {
+      input.addEventListener("change", render);
     });
 
     form.addEventListener("submit", (event) => {

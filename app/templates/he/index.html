@@ -3,23 +3,22 @@
 {% block content %}
   <section class="hero shell">
     <div class="hero-layout">
-      <div>
-        <p class="kicker">הזמנת מחמצת מראש</p>
+      <div class="hero-copy">
         <div class="brand-lockup">
-          <img class="brand-logo" src="/static/images/logo.jpg" alt="לוגו לחם בהר, מאפייה מקומית" width="150" height="150">
-          <h1 class="brand-display">לחם בהר</h1>
+          <img class="brand-logo" src="/static/images/logo.jpg" alt="" width="150" height="150">
         </div>
-        <p class="hero-line">הזמינו לחם <em>למשלוח ביום שישי.</em></p>
-        <p class="lede">אנחנו אופים פעם בשבוע. ההזמנות נסגרות ביום רביעי, והכיכרות יוצאות ביום שישי שאחריו. לכל משלוח יש אפייה מוגבלת.</p>
+        <h1 class="hero-title">לחמי מחמצת בעבודת יד</h1>
+        <p class="hero-line">נאפים באהבה, מגיעים אליכם בשישי.</p>
+        <p class="lede">אנחנו אופים פעם בשבוע, במיוחד בשבילכם. ההזמנות נסגרות ביום רביעי בשעה 20:00, והלחמים יוצאים למשלוח או לאיסוף ביום שישי.</p>
+        <p class="hero-cta"><a class="pay-button" href="#the-bake">למבחר השבוע</a></p>
       </div>
       <figure class="hero-photo">
-        <img src="/static/images/catalog/challah-sourdough.jpg" alt="כיכרות מחמצת של לחם בהר" width="1400" height="1050">
+        <img src="/static/images/hero-loaf.jpg" alt="כיכרות מחמצת מקמח מלא, עם גרעינים וקמח על השולחן" width="1400" height="931" fetchpriority="high" decoding="async">
       </figure>
     </div>
   </section>
 
   <section class="shell choose" id="delivery" aria-labelledby="delivery-heading">
-    <h2 id="delivery-heading">{% if deadline_closed %}יום שישי הבא{% else %}משלוח{% endif %}</h2>
     {% if welcome_message %}
       <p class="banner banner-welcome" role="status">{{ welcome_message }}</p>
     {% endif %}
@@ -31,82 +30,115 @@
     {% endif %}
     {% if slots %}
       {% set item = slots[0] %}
-      <div class="week-card{% if not item.available %} is-full{% endif %}">
-        <div>
-          <p class="week-label">מועד אחרון להזמנה</p>
-          <p class="week-date">{{ item.order_weekday }}</p>
-          <p>{{ item.order_day }} ב{{ item.order_month }}</p>
-        </div>
-        <div>
-          <p class="week-label">המשלוח הבא</p>
-          <p class="week-date">{{ item.weekday }}</p>
-          <p>{{ item.day }} ב{{ item.month }}</p>
-          <p class="meta">{{ item.window }} · {% if not item.available %}מלא{% elif item.remaining == 1 %}נותרה כיכר אחת{% else %}נותרו {{ item.remaining }} כיכרות{% endif %}</p>
+      <div class="schedule{% if not item.available %} is-full{% endif %}">
+        <h2 class="schedule-title" id="delivery-heading">הזמנות ומשלוחים</h2>
+        <div class="schedule-cards">
+          <article class="schedule-card">
+            <svg class="schedule-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <rect x="3.5" y="5" width="17" height="15.5" rx="2" fill="none" stroke="currentColor" stroke-width="1.7"/>
+              <path fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" d="M8 3.5v3M16 3.5v3M3.5 10h17"/>
+            </svg>
+            <p class="schedule-q">מתי מזמינים?</p>
+            <p class="schedule-date">עד {{ item.order_weekday }}, {{ item.order_day }} ב{{ item.order_month }}</p>
+            <p class="schedule-note">בשעה {{ item.order_cutoff }} נסגרת ההזמנה למשלוח הקרוב</p>
+          </article>
+          <article class="schedule-card">
+            <svg class="schedule-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" stroke-linecap="round" d="M3 7.5h11v8H3zM14 10.5h3.2L20 13.5V15.5h-6"/>
+              <circle cx="7" cy="17.8" r="1.5" fill="none" stroke="currentColor" stroke-width="1.7"/>
+              <circle cx="17" cy="17.8" r="1.5" fill="none" stroke="currentColor" stroke-width="1.7"/>
+            </svg>
+            <p class="schedule-q">מתי מקבלים את המשלוח?</p>
+            <p class="schedule-date">{{ item.weekday }}, {{ item.day }} ב{{ item.month }}</p>
+            <p class="schedule-note">בין השעות {{ item.window }}</p>
+            <p class="schedule-aside">שימו לב - לא נוכל לתת שעת הגעה מדויקת, משום שאנו אופים את הלחמים כמה שיותר קרוב להזמנתכם- על כן המשלוח ללא עלות.</p>
+          </article>
         </div>
       </div>
     {% else %}
+      <h2 class="schedule-title" id="delivery-heading">הזמנות ומשלוחים</h2>
       <p>אין כרגע שבוע פתוח להזמנה.</p>
     {% endif %}
   </section>
 
   {% if slot %}
     <section class="shell bake" id="the-bake" aria-labelledby="bake-heading">
-      <div class="order-bar">
-        <p>{{ slot.label }} · {{ slot.window }}</p>
-        <p><a href="/cart?lang=he">לסל{% if cart_held %} · {{ cart_held }}{% endif %}</a></p>
-      </div>
-      <h2 id="bake-heading">
-        {% if slot.remaining == 1 %}נותרה כיכר אחת למשלוח הזה.{% else %}נותרו {{ slot.remaining }} כיכרות למשלוח הזה.{% endif %}
-      </h2>
+      <h2 id="bake-heading" class="visually-hidden">מבחר השבוע</h2>
+      <div class="catalog-rule" aria-hidden="true"></div>
       {% if added %}
-        <p class="banner banner-welcome" role="status">הכיכר נוספה לסל. <a href="/cart?lang=he">לצפייה בסל</a></p>
-      {% endif %}
-      {% if bake_full %}
-        <p class="banner" role="status">מכסת האפייה למשלוח הזה מלאה. פריטים שאינם נכללים במכסה הכללית עדיין ניתנים להזמנה.</p>
-      {% elif cart_holds_bake %}
-        <p class="banner" role="status">כל הכיכרות שנותרו למשלוח הזה כבר בסל. <a href="/cart?lang=he">לצפייה בסל</a></p>
+        <p class="banner banner-welcome"{% if not added_product %} role="status"{% endif %}>הפריט נוסף לסל. <a href="/cart?lang=he">לצפייה בסל</a></p>
       {% endif %}
       <div class="loaves">
         {% for product in products %}
           {% set held = cart_quantities.get(product.id, 0) %}
           {% set add_room = product_room.get(product.id, 0) %}
-          <article class="loaf">
+          <article class="loaf" id="loaf-{{ product.id }}">
             <figure>
-              <img src="{{ product.image_url }}" alt="פנים הכיכר והקרום של {{ product.name_he }}" width="1400" height="1050" loading="lazy" decoding="async">
+              <img src="{{ product.image_url }}" alt="תצלום של {{ product.name_he }}" width="740" height="740" loading="lazy" decoding="async">
             </figure>
             <div class="loaf-copy">
               <h3>{{ product.name_he }}</h3>
               <p class="price">{{ product.price|money }}</p>
-              <p>{{ product.description_he }}</p>
-              <p class="meta">{% if product.fermentation_hours %}התפחה של {{ product.fermentation_hours }} שעות · {% endif %}{{ product.ingredients_he }}</p>
+              {% if product.description_he %}
+                <p>{{ product.description_he }}</p>
+              {% endif %}
               {% if product.delivery_limit is not none %}
                 <p class="meta">עד {{ product.delivery_limit }} למשלוח הזה.</p>
               {% endif %}
-              {% if not product.counts_toward_capacity %}
-                <p class="meta">לא נספר במכסה הכללית.</p>
-              {% endif %}
-              {% if add_room > 0 %}
-                <form class="add-cart" action="/cart/add" method="post" data-remaining="{{ add_room }}">
-                  <input type="hidden" name="lang" value="he">
-                  <input type="hidden" name="delivery_date" value="{{ slot.date }}">
-                  <input type="hidden" name="product_id" value="{{ product.id }}">
-                  <input type="hidden" name="next" value="/?lang=he">
+            </div>
+            {% if product_sold_out.get(product.id) %}
+              <div class="loaf-version"></div>
+              <div class="add-row">
+                <p class="sold-out">נגמר המלאי</p>
+              </div>
+            {% elif add_room > 0 %}
+              <form class="add-cart" action="/cart/add" method="post" data-remaining="{{ add_room }}">
+                <input type="hidden" name="lang" value="he">
+                <input type="hidden" name="delivery_date" value="{{ slot.date }}">
+                <input type="hidden" name="product_id" value="{{ product.id }}">
+                <input type="hidden" name="next" value="/?lang=he#loaf-{{ product.id }}">
+                <div class="loaf-version">
+                  {% if offers_version(product) %}
+                    <fieldset class="version-choice">
+                      <legend>גרסה</legend>
+                      <label>
+                        <input type="radio" name="variant" value="regular" checked>
+                        <span>רגילה</span>
+                      </label>
+                      <label>
+                        <input type="radio" name="variant" value="vegan">
+                        <span>טבעונית</span>
+                      </label>
+                    </fieldset>
+                  {% endif %}
+                </div>
+                <div class="add-row">
                   <div class="qty">
                     <button type="button" class="step" data-dir="-1" aria-label="פחות {{ product.name_he }}">−</button>
                     <input class="qty-input" type="number" name="quantity" value="1" min="1" max="{{ add_room }}" inputmode="numeric" aria-label="כמות להוספה של {{ product.name_he }}">
                     <button type="button" class="step" data-dir="1" aria-label="עוד {{ product.name_he }}">+</button>
                   </div>
                   <button class="pay-button" type="submit">הוספה לסל</button>
-                </form>
-              {% else %}
-                <p class="meta">לא נותר מהפריט הזה למשלוח.</p>
-              {% endif %}
-              {% if held == 1 %}
-                <p class="meta">כיכר אחת בסל</p>
-              {% elif held %}
-                <p class="meta">{{ held }} כיכרות בסל</p>
-              {% endif %}
-            </div>
+                  {% if added and added_product == product.id %}
+                    <p class="banner banner-welcome" role="status">הפריט נוסף לסל. <a href="/cart?lang=he">לצפייה בסל</a></p>
+                  {% endif %}
+                  {% if held == 1 %}
+                    <p class="meta">כיכר אחת בסל</p>
+                  {% elif held %}
+                    <p class="meta">{{ held }} כיכרות בסל</p>
+                  {% endif %}
+                </div>
+              </form>
+            {% else %}
+              <div class="loaf-version"></div>
+              <div class="add-row">
+                {% if held == 1 %}
+                  <p class="meta">כיכר אחת בסל</p>
+                {% elif held %}
+                  <p class="meta">{{ held }} כיכרות בסל</p>
+                {% endif %}
+              </div>
+            {% endif %}
           </article>
         {% endfor %}
       </div>

@@ -3,23 +3,22 @@
 {% block content %}
   <section class="hero shell">
     <div class="hero-layout">
-      <div>
-        <p class="kicker">Sourdough pre-order</p>
+      <div class="hero-copy">
         <div class="brand-lockup">
-          <img class="brand-logo" src="/static/images/logo.jpg" alt="לחם בהר logo, a local bakery" width="150" height="150">
-          <h1 class="brand-display">לחם בהר</h1>
+          <img class="brand-logo" src="/static/images/logo.jpg" alt="" width="150" height="150">
         </div>
-        <p class="hero-line">Order bread <em>for Friday delivery.</em></p>
-        <p class="lede">We bake once a week. Orders close on Wednesday, and the loaves go out the following Friday. Each delivery has a limited bake.</p>
+        <h1 class="hero-title">Handcrafted Sourdough Bread</h1>
+        <p class="hero-line">Baked with love, delivered on Friday.</p>
+        <p class="lede">We bake once a week, just for you. Orders close on Wednesday at 20:00, and the bread goes out for delivery or pickup on Friday.</p>
+        <p class="hero-cta"><a class="pay-button" href="#the-bake">Shop this week's bake</a></p>
       </div>
       <figure class="hero-photo">
-        <img src="/static/images/catalog/challah-sourdough.jpg" alt="Rustic sourdough loaves from לחם בהר" width="1400" height="1050">
+        <img src="/static/images/hero-loaf.jpg" alt="Whole-grain sourdough loaves with seeds and flour on a wooden table" width="1400" height="931" fetchpriority="high" decoding="async">
       </figure>
     </div>
   </section>
 
   <section class="shell choose" id="delivery" aria-labelledby="delivery-heading">
-    <h2 id="delivery-heading">{% if deadline_closed %}Next Friday{% else %}Delivery{% endif %}</h2>
     {% if welcome_message %}
       <p class="banner banner-welcome" role="status">{{ welcome_message }}</p>
     {% endif %}
@@ -31,82 +30,115 @@
     {% endif %}
     {% if slots %}
       {% set item = slots[0] %}
-      <div class="week-card{% if not item.available %} is-full{% endif %}">
-        <div>
-          <p class="week-label">Last ordering</p>
-          <p class="week-date">{{ item.order_weekday }}</p>
-          <p>{{ item.order_day }} {{ item.order_month }}</p>
-        </div>
-        <div>
-          <p class="week-label">Next delivery</p>
-          <p class="week-date">{{ item.weekday }}</p>
-          <p>{{ item.day }} {{ item.month }}</p>
-          <p class="meta">{{ item.window }} · {% if not item.available %}Full{% elif item.remaining == 1 %}1 loaf left{% else %}{{ item.remaining }} loaves left{% endif %}</p>
+      <div class="schedule{% if not item.available %} is-full{% endif %}">
+        <h2 class="schedule-title" id="delivery-heading">Orders and delivery</h2>
+        <div class="schedule-cards">
+          <article class="schedule-card">
+            <svg class="schedule-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <rect x="3.5" y="5" width="17" height="15.5" rx="2" fill="none" stroke="currentColor" stroke-width="1.7"/>
+              <path fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" d="M8 3.5v3M16 3.5v3M3.5 10h17"/>
+            </svg>
+            <p class="schedule-q">When can you order?</p>
+            <p class="schedule-date">Through {{ item.order_weekday }}, {{ item.order_day }} {{ item.order_month }}</p>
+            <p class="schedule-note">Orders for this delivery close at {{ item.order_cutoff }}</p>
+          </article>
+          <article class="schedule-card">
+            <svg class="schedule-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" stroke-linecap="round" d="M3 7.5h11v8H3zM14 10.5h3.2L20 13.5V15.5h-6"/>
+              <circle cx="7" cy="17.8" r="1.5" fill="none" stroke="currentColor" stroke-width="1.7"/>
+              <circle cx="17" cy="17.8" r="1.5" fill="none" stroke="currentColor" stroke-width="1.7"/>
+            </svg>
+            <p class="schedule-q">When does it arrive?</p>
+            <p class="schedule-date">{{ item.weekday }}, {{ item.day }} {{ item.month }}</p>
+            <p class="schedule-note">Between {{ item.window }}</p>
+            <p class="schedule-aside">Please note — we can't give an exact arrival time, because we bake the loaves as close as possible to your order. Delivery is free.</p>
+          </article>
         </div>
       </div>
     {% else %}
+      <h2 class="schedule-title" id="delivery-heading">Orders and delivery</h2>
       <p>No delivery week is open right now.</p>
     {% endif %}
   </section>
 
   {% if slot %}
     <section class="shell bake" id="the-bake" aria-labelledby="bake-heading">
-      <div class="order-bar">
-        <p>{{ slot.label }} · {{ slot.window }}</p>
-        <p><a href="/cart?lang=en">View cart{% if cart_held %} · {{ cart_held }}{% endif %}</a></p>
-      </div>
-      <h2 id="bake-heading">
-        {% if slot.remaining == 1 %}1 loaf left for this delivery.{% else %}{{ slot.remaining }} loaves left for this delivery.{% endif %}
-      </h2>
+      <h2 id="bake-heading" class="visually-hidden">This week's bake</h2>
+      <div class="catalog-rule" aria-hidden="true"></div>
       {% if added %}
-        <p class="banner banner-welcome" role="status">Added to your cart. <a href="/cart?lang=en">View cart</a></p>
-      {% endif %}
-      {% if bake_full %}
-        <p class="banner" role="status">This delivery's bake is full. Items outside the general capacity can still be ordered.</p>
-      {% elif cart_holds_bake %}
-        <p class="banner" role="status">Every remaining loaf for this delivery is already in your cart. <a href="/cart?lang=en">View cart</a></p>
+        <p class="banner banner-welcome"{% if not added_product %} role="status"{% endif %}>Added to your cart. <a href="/cart?lang=en">View cart</a></p>
       {% endif %}
       <div class="loaves">
         {% for product in products %}
           {% set held = cart_quantities.get(product.id, 0) %}
           {% set add_room = product_room.get(product.id, 0) %}
-          <article class="loaf">
+          <article class="loaf" id="loaf-{{ product.id }}">
             <figure>
-              <img src="{{ product.image_url }}" alt="Crumb and crust of {{ product.name_en }}" width="1400" height="1050" loading="lazy" decoding="async">
+              <img src="{{ product.image_url }}" alt="Photograph of {{ product.name_en }}" width="740" height="740" loading="lazy" decoding="async">
             </figure>
             <div class="loaf-copy">
               <h3>{{ product.name_en }}</h3>
               <p class="price">{{ product.price|money }}</p>
-              <p>{{ product.description_en }}</p>
-              <p class="meta">{% if product.fermentation_hours %}{{ product.fermentation_hours }}-hour ferment · {% endif %}{{ product.ingredients_en }}</p>
+              {% if product.description_en %}
+                <p>{{ product.description_en }}</p>
+              {% endif %}
               {% if product.delivery_limit is not none %}
                 <p class="meta">Up to {{ product.delivery_limit }} for this delivery.</p>
               {% endif %}
-              {% if not product.counts_toward_capacity %}
-                <p class="meta">Not counted in the general capacity.</p>
-              {% endif %}
-              {% if add_room > 0 %}
-                <form class="add-cart" action="/cart/add" method="post" data-remaining="{{ add_room }}">
-                  <input type="hidden" name="lang" value="en">
-                  <input type="hidden" name="delivery_date" value="{{ slot.date }}">
-                  <input type="hidden" name="product_id" value="{{ product.id }}">
-                  <input type="hidden" name="next" value="/?lang=en">
+            </div>
+            {% if product_sold_out.get(product.id) %}
+              <div class="loaf-version"></div>
+              <div class="add-row">
+                <p class="sold-out">Sold out</p>
+              </div>
+            {% elif add_room > 0 %}
+              <form class="add-cart" action="/cart/add" method="post" data-remaining="{{ add_room }}">
+                <input type="hidden" name="lang" value="en">
+                <input type="hidden" name="delivery_date" value="{{ slot.date }}">
+                <input type="hidden" name="product_id" value="{{ product.id }}">
+                <input type="hidden" name="next" value="/?lang=en#loaf-{{ product.id }}">
+                <div class="loaf-version">
+                  {% if offers_version(product) %}
+                    <fieldset class="version-choice">
+                      <legend>Version</legend>
+                      <label>
+                        <input type="radio" name="variant" value="regular" checked>
+                        <span>Regular</span>
+                      </label>
+                      <label>
+                        <input type="radio" name="variant" value="vegan">
+                        <span>Vegan</span>
+                      </label>
+                    </fieldset>
+                  {% endif %}
+                </div>
+                <div class="add-row">
                   <div class="qty">
                     <button type="button" class="step" data-dir="-1" aria-label="Fewer {{ product.name_en }}">−</button>
-                    <input class="qty-input" type="number" name="quantity" value="1" min="1" max="{{ add_room }}" inputmode="numeric" aria-label="Loaves of {{ product.name_en }} to add">
+                    <input class="qty-input" type="number" name="quantity" value="1" min="1" max="{{ add_room }}" inputmode="numeric" aria-label="Quantity of {{ product.name_en }} to add">
                     <button type="button" class="step" data-dir="1" aria-label="More {{ product.name_en }}">+</button>
                   </div>
                   <button class="pay-button" type="submit">Add to cart</button>
-                </form>
-              {% else %}
-                <p class="meta">None left for this delivery.</p>
-              {% endif %}
-              {% if held == 1 %}
-                <p class="meta">1 loaf in your cart</p>
-              {% elif held %}
-                <p class="meta">{{ held }} loaves in your cart</p>
-              {% endif %}
-            </div>
+                  {% if added and added_product == product.id %}
+                    <p class="banner banner-welcome" role="status">Added to your cart. <a href="/cart?lang=en">View cart</a></p>
+                  {% endif %}
+                  {% if held == 1 %}
+                    <p class="meta">1 loaf in your cart</p>
+                  {% elif held %}
+                    <p class="meta">{{ held }} loaves in your cart</p>
+                  {% endif %}
+                </div>
+              </form>
+            {% else %}
+              <div class="loaf-version"></div>
+              <div class="add-row">
+                {% if held == 1 %}
+                  <p class="meta">1 loaf in your cart</p>
+                {% elif held %}
+                  <p class="meta">{{ held }} loaves in your cart</p>
+                {% endif %}
+              </div>
+            {% endif %}
           </article>
         {% endfor %}
       </div>

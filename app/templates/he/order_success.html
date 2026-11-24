@@ -21,7 +21,7 @@
         </li>
         {% for item in order.items %}
           <li>
-            <span>{{ item.quantity }} × {{ item.product.name_he or item.product.name }}</span>
+            <span>{{ item.quantity }} × {{ line_title(item.product, item.variant, lang) }}</span>
             <span>{{ (item.quantity * item.unit_price)|money }}</span>
           </li>
         {% endfor %}

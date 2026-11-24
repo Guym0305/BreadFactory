@@ -75,8 +75,8 @@ def main() -> None:
         expect(opened.status_code == 200, "catalog should open without an account")
         expect("Sign in" in opened.text, "sign-in link missing")
         expect("account-chip" not in opened.text, "anonymous visit should not show an account")
-        expect("Last ordering" in opened.text, "home is missing the Wednesday deadline")
-        expect("challah-sourdough.jpg" in opened.text, "catalog hero photo missing")
+        expect("When can you order?" in opened.text, "home is missing the Wednesday deadline")
+        expect("hero-loaf.jpg" in opened.text, "catalog hero photo missing")
         expect("/static/images/logo.jpg" in opened.text, "bakery logo missing from the catalog")
         expect('dir="ltr"' in opened.text, "english page should read left to right")
         locked_orders = client.get("/orders?lang=en", follow_redirects=False)
@@ -94,17 +94,18 @@ def main() -> None:
         browse = client.get("/cart?lang=en")
         expect(browse.status_code == 200, "cart should open without an account")
         expect("Have an account? Sign in" in browse.text, "cart sign-in prompt missing")
-        expect("Har Adar" in browse.text, "cart delivery towns missing")
+        expect("Browse this week's bake" in browse.text, "empty cart should return to the catalog")
+        expect("Place order" not in browse.text, "an empty cart should not offer checkout")
 
         become_guest(client)
         home = client.get("/?lang=en")
         expect(home.status_code == 200, f"home status {home.status_code}")
-        expect("Last ordering" in home.text, "home is missing the Wednesday deadline")
-        expect("Next delivery" in home.text, "home is missing the Friday delivery")
+        expect("When can you order?" in home.text, "home is missing the Wednesday deadline")
+        expect("When does it arrive?" in home.text, "home is missing the Friday delivery")
         expect("Cart" in home.text, "cart link is missing")
         expect("My Orders" in home.text, "order history link is missing")
         expect("לחם בהר" in home.text, "the business name should lead the english page")
-        expect("challah-sourdough.jpg" in home.text, "the home page is missing its loaf photo")
+        expect("hero-loaf.jpg" in home.text, "the home page is missing its loaf photo")
         expect("/static/images/catalog/spelt-100.jpg" in home.text, "catalog product photo missing")
         expect("100% Whole Spelt Sourdough" in home.text, "new catalog product missing")
         expect("Playfair+Display" in home.text, "serif face is not loaded")
@@ -135,8 +136,8 @@ def main() -> None:
         become_guest(client)
 
         hebrew_home = client.get("/?lang=he")
-        expect("מועד אחרון להזמנה" in hebrew_home.text, "hebrew home is missing the order deadline")
-        expect("המשלוח הבא" in hebrew_home.text, "hebrew home is missing the delivery label")
+        expect("מתי מזמינים?" in hebrew_home.text, "hebrew home is missing the order deadline")
+        expect("מתי מקבלים את המשלוח?" in hebrew_home.text, "hebrew home is missing the delivery label")
         expect("סל" in hebrew_home.text, "hebrew cart link is missing")
         expect("ההזמנות שלי" in hebrew_home.text, "hebrew order history link is missing")
         expect('lang="he"' in hebrew_home.text, "hebrew page is missing its language")
@@ -150,7 +151,7 @@ def main() -> None:
 
         slots = client.get("/api/v1/slots?lang=en").json()
         products = client.get("/api/v1/products").json()
-        expect(len(products) == 12, "expected twelve catalog products")
+        expect(len(products) == 14, "expected fourteen catalog products")
         expect(len(slots) == 1, "the screen should offer one delivery week")
         day = slots[0]["date"]
         delivery = date.fromisoformat(day)
@@ -177,8 +178,11 @@ def main() -> None:
             catalog.close()
         chosen = client.get(f"/?date={day}&lang=en")
         expect("Country Sourdough" in chosen.text, "gallery did not open for the coming Friday")
-        expect("Not counted in the general capacity." in chosen.text, "cookie capacity note missing")
+        expect("Not counted in the general capacity." not in chosen.text, "capacity note should stay off the menu")
         expect("Add to cart" in chosen.text, "add to cart is missing")
+        expect("20% whole flour, no commercial yeast." in chosen.text, "challah description missing")
+        expect('name="variant"' in chosen.text, "challah version choice missing")
+        expect(">Vegan<" in chosen.text, "vegan challah option missing")
         expect("Cart" in chosen.text, "cart link is missing")
         product_name = products[0]["name_en"]
         added = client.post(
@@ -213,7 +217,7 @@ def main() -> None:
             },
         )
         expect(over_limit.status_code == 400, "product limit was ignored")
-        expect("Only 1 more of that item is left for this delivery." in over_limit.text, "product limit message missing")
+        expect("There is not enough of that item for this delivery." in over_limit.text, "product limit message missing")
         cleared = SessionLocal()
         try:
             row = cleared.query(Product).filter(Product.id == product_id).one()
@@ -223,7 +227,8 @@ def main() -> None:
             cleared.close()
         cart_page = client.get("/cart?lang=en")
         expect("Place order" in cart_page.text, "order form is missing")
-        expect("How to charge" in cart_page.text, "payment method picker is missing")
+        expect("Payment method" in cart_page.text, "payment method picker is missing")
+        expect("Har Adar" in cart_page.text, "cart delivery towns missing")
         expect("/static/images/payment/bit.svg" in cart_page.text, "Bit icon is missing")
         expect("/static/images/payment/paybox.svg" in cart_page.text, "PayBox icon is missing")
         expect(product_name in cart_page.text, "cart line missing")
@@ -249,15 +254,16 @@ def main() -> None:
             expect("Next Friday" in cart_page.text, "closed week should offer next Friday")
             expect("The deadline for this Friday has passed." in cart_page.text, "missed-deadline warning missing")
         else:
-            expect("Coming Delivery" in cart_page.text, "coming delivery choice missing")
-            expect("Next delivery" in cart_page.text, "next delivery choice missing")
+            expect("This Friday" in cart_page.text, "coming delivery choice missing")
+            expect("Following Friday" in cart_page.text, "next delivery choice missing")
         hebrew_bake = client.get(f"/?date={day}&lang=he")
         expect("לחם מחמצת כוסמין מלא 100%" in hebrew_bake.text, "hebrew product title is missing")
         expect("חלה מחמצת" in hebrew_bake.text, "hebrew challah title is missing")
+        expect("20% קמח מלא, ללא שמרים תעשתיים." in hebrew_bake.text, "hebrew challah description missing")
         expect("כיכר אחת בסל" in hebrew_bake.text, "hebrew cart quantity missing")
-        expect("לא נספר במכסה הכללית." in hebrew_bake.text, "hebrew cookie capacity note missing")
+        expect("לא נספר במכסה הכללית." not in hebrew_bake.text, "hebrew capacity note should stay off the menu")
         hebrew_cart = client.get("/cart?lang=he")
-        expect("איך לחייב" in hebrew_cart.text, "hebrew payment picker is missing")
+        expect("אמצעי תשלום" in hebrew_cart.text, "hebrew payment picker is missing")
         expect(products[0]["name_he"] in hebrew_cart.text, "hebrew cart line missing")
         removed = client.post(
             "/cart/remove",
@@ -281,6 +287,59 @@ def main() -> None:
         expect(removed.status_code == 200, "remove from cart failed")
         expect("Your cart is empty" in removed.text, "empty cart copy missing")
         expect('class="cart-count"' not in removed.text, "removed loaf still counted")
+
+        challah = next(item for item in products if item["name_en"] == "Sourdough Challah")
+        vegan = client.post(
+            "/cart/add",
+            data={
+                "lang": "he",
+                "delivery_date": day,
+                "product_id": str(challah["id"]),
+                "quantity": "1",
+                "variant": "vegan",
+                "next": "/?lang=he",
+            },
+        )
+        expect(vegan.status_code == 200, "vegan challah was not added")
+        regular = client.post(
+            "/cart/add",
+            data={
+                "lang": "he",
+                "delivery_date": day,
+                "product_id": str(challah["id"]),
+                "quantity": "1",
+                "variant": "regular",
+                "next": "/?lang=he",
+            },
+        )
+        expect(regular.status_code == 200, "regular challah was not added")
+        expect('class="cart-count">2<' in regular.text, "the two challah versions should count as two loaves")
+        challah_cart = client.get("/cart?lang=he")
+        expect("חלה מחמצת" in challah_cart.text, "challah missing from the cart")
+        expect("טבעונית" in challah_cart.text, "vegan challah missing from the cart")
+        expect("רגילה" in challah_cart.text, "regular challah missing from the cart")
+        expect(f"qty_{challah['id']}_vegan" in challah_cart.text, "vegan challah should be its own cart line")
+        expect(f"qty_{challah['id']}_regular" in challah_cart.text, "regular challah should be its own cart line")
+        client.post(
+            "/cart/remove",
+            data={
+                "lang": "he",
+                "delivery_date": day,
+                "remove_line": f"{challah['id']}@vegan",
+                f"qty_{challah['id']}_vegan": "1",
+                f"qty_{challah['id']}_regular": "1",
+            },
+        )
+        cleared_challah = client.post(
+            "/cart/remove",
+            data={
+                "lang": "he",
+                "delivery_date": day,
+                "remove_line": f"{challah['id']}@regular",
+                f"qty_{challah['id']}_regular": "1",
+            },
+        )
+        expect("הסל ריק" in cleared_challah.text, "challah versions were not removed")
 
         client.post("/logout", data={"lang": "en"}, follow_redirects=False)
         rejected = client.post(
@@ -420,6 +479,13 @@ def main() -> None:
         expect(cookie_order.status_code == 200, cookie_order.text)
         after_cookie = client.get("/api/v1/slots?lang=en").json()
         expect(after_cookie[0]["remaining"] == 0, "a cookie order consumed bake capacity")
+        sold_out_page = client.get(f"/?lang=en&date={day}")
+        expect("Sold out" in sold_out_page.text, "sold-out label missing when the bake is full")
+        expect("loaves left" not in sold_out_page.text, "remaining loaf count is still shown")
+        expect("Add to cart" in sold_out_page.text, "items outside the bake should stay orderable")
+        hebrew_full = client.get(f"/?lang=he&date={day}")
+        expect("נגמר המלאי" in hebrew_full.text, "hebrew sold-out label missing")
+        expect("נותרו" not in hebrew_full.text, "hebrew remaining count is still shown")
         full_reorder = client.post(f"/orders/{order_number}/reorder", data={"lang": "en"})
         expect(full_reorder.status_code == 400, "a full bake accepted another counted loaf")
         expect("This delivery is full." in full_reorder.text, "full bake message missing")
@@ -487,6 +553,16 @@ def main() -> None:
         expect(registered.status_code == 303, "registration did not redirect")
         signed_in = client.get("/?week=next&lang=en")
         expect("baker_noa" in signed_in.text, "registered username missing from header")
+        client.post(
+            "/cart/add",
+            data={
+                "lang": "en",
+                "delivery_date": day,
+                "product_id": str(cookie["id"]),
+                "quantity": "1",
+                "next": "/",
+            },
+        )
         details = client.get("/cart?lang=en")
         expect('value="Noa Baker"' in details.text, "registered customer name was not prefilled")
         expect('value="0506666666"' in details.text, "registered customer phone was not prefilled")
