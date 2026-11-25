@@ -199,4 +199,32 @@
       });
     });
   });
+
+  const touchMenu = window.matchMedia("(hover: none), (pointer: coarse)");
+  document.querySelectorAll(".account-menu").forEach((menu) => {
+    const button = menu.querySelector(".account-chip");
+    if (!button) {
+      return;
+    }
+    const setOpen = (open) => {
+      menu.classList.toggle("is-open", open);
+      button.setAttribute("aria-expanded", open ? "true" : "false");
+    };
+    button.addEventListener("click", () => {
+      if (!touchMenu.matches) {
+        return;
+      }
+      setOpen(!menu.classList.contains("is-open"));
+    });
+    document.addEventListener("click", (event) => {
+      if (!menu.contains(event.target)) {
+        setOpen(false);
+      }
+    });
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") {
+        setOpen(false);
+      }
+    });
+  });
 })();

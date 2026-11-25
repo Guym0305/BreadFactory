@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime, timezone
 from urllib.parse import parse_qsl, quote, urlencode, urlsplit
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -36,6 +36,7 @@ from app.services.auth import (
     register_user,
     set_login_welcome,
     set_session_user,
+    update_customer_profile,
 )
 from app.services.cart import (
     MAX_LINE,
@@ -55,7 +56,9 @@ from app.services.orders import get_order, list_customer_orders
 from app.services.places import address_form_fields, registration_address
 from app.services.payments import apply_webhook
 from app.services.slots import (
+    BAKERY_TZ,
     assert_cart_fits,
+    bakery_now,
     cycle_for,
     list_slots,
     ordering_closed,
@@ -595,6 +598,82 @@ async def logout_submit(request: Request, db: Session = Depends(get_db)):
     response = RedirectResponse(redirect_path("/login"), status_code=303)
     clear_session(response)
     return response
+
+
+def _account_form(user) -> dict[str, str]:
+    customer = user.customer
+    saved = customer_form_defaults(customer)
+    saved.update(address_form_fields((customer.address if customer is not None else "") or ""))
+    return saved
+
+
+def _posted_account(form) -> dict[str, str]:
+    return {
+        "full_name": str(form.get("full_name") or ""),
+        "phone": str(form.get("phone") or ""),
+        "email": str(form.get("email") or ""),
+        "fulfillment": str(form.get("fulfillment") or ""),
+        "delivery_city": str(form.get("delivery_city") or ""),
+        "street_address": str(form.get("street_address") or ""),
+        "pickup_point": str(form.get("pickup_point") or ""),
+    }
+
+
+@router.get("/account")
+def account_page(request: Request, db: Session = Depends(get_db)):
+    resolve_lang(request)
+    user = current_user(request, db)
+    if user is None:
+        return _login_redirect(request, "/account")
+    return render(
+        request,
+        "account.html",
+        {
+            "current_user": user,
+            "saved": {} if user.is_guest else _account_form(user),
+            "error": None,
+            "notice": request.query_params.get("saved") == "1",
+        },
+    )
+
+
+@router.post("/account")
+async def account_submit(request: Request, db: Session = Depends(get_db)):
+    form = await request.form()
+    _use_lang(request, str(form.get("lang")) if form.get("lang") else None)
+    user = current_user(request, db)
+    if user is None:
+        return _login_redirect(request, "/account")
+    posted = _posted_account(form)
+    try:
+        assert_same_origin(request)
+        address = registration_address(
+            posted["fulfillment"],
+            posted["delivery_city"],
+            posted["pickup_point"],
+            posted["street_address"],
+        )
+        update_customer_profile(
+            db,
+            user,
+            full_name=posted["full_name"],
+            phone=posted["phone"],
+            email=posted["email"],
+            address=address,
+        )
+    except CheckoutError as exc:
+        return render(
+            request,
+            "account.html",
+            {
+                "current_user": user,
+                "saved": posted,
+                "error": exc.message,
+                "notice": False,
+            },
+            status_code=exc.status_code,
+        )
+    return RedirectResponse(redirect_path("/account?saved=1"), status_code=303)
 
 
 @router.get("/admin")
@@ -1139,24 +1218,44 @@ async def remove_from_cart(request: Request, db: Session = Depends(get_db)):
     return response
 
 
-_STATUS_LABELS = {
+_PROGRESS_LABELS = {
     "en": {
-        "PAID": "Paid",
-        "DELIVERED": "Delivered",
-        "CANCELLED": "Cancelled",
-        "PENDING_PAYMENT": "Awaiting payment",
+        "received": "Received and in progress",
+        "completed": "Completed",
+        "cancelled": "Cancelled",
     },
     "he": {
-        "PAID": "שולם",
-        "DELIVERED": "נמסר",
-        "CANCELLED": "בוטל",
-        "PENDING_PAYMENT": "ממתין לתשלום",
+        "received": "התקבל ובטיפול",
+        "completed": "הושלם",
+        "cancelled": "בוטל",
     },
 }
 
 
+def _progress_key(order) -> str:
+    if _status_value(order) == OrderStatus.CANCELLED.value:
+        return "cancelled"
+    delivery = order.delivery_date
+    if delivery.tzinfo is None:
+        done_at = delivery.replace(hour=12, minute=0, second=0, microsecond=0, tzinfo=BAKERY_TZ)
+    else:
+        done_at = delivery.astimezone(BAKERY_TZ).replace(hour=12, minute=0, second=0, microsecond=0)
+    if bakery_now() >= done_at:
+        return "completed"
+    return "received"
+
+
+def _placed_local(order) -> datetime:
+    created = order.created_at
+    if created is None:
+        return order.delivery_date
+    if created.tzinfo is None:
+        created = created.replace(tzinfo=timezone.utc)
+    return created.astimezone(BAKERY_TZ)
+
+
 def _history_rows(db: Session, user, lang: str) -> list[dict]:
-    labels = _STATUS_LABELS["he" if lang == "he" else "en"]
+    labels = _PROGRESS_LABELS["he" if lang == "he" else "en"]
     rows = []
     for order in list_customer_orders(db, user.customer_id):
         lines = []
@@ -1169,12 +1268,12 @@ def _history_rows(db: Session, user, lang: str) -> list[dict]:
                     "total": round(item.quantity * item.unit_price, 2),
                 }
             )
-        status = _status_value(order)
         rows.append(
             {
                 "number": order.order_number,
+                "placed": _placed_local(order),
                 "delivery": order.delivery_date,
-                "status": labels.get(status, status),
+                "progress": labels[_progress_key(order)],
                 "total": order.total_amount,
                 "lines": lines,
             }

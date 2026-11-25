@@ -9,7 +9,7 @@
     {% else %}
       <p class="kicker">ההזמנה אושרה</p>
       <p class="confirm-message">כבר רצים לאפות את הזמנה: {{ order.order_number }}</p>
-      <p class="lede">המשלוח ב{{ order.delivery_date|delivery_label(lang) }}, בין {{ delivery_window }}, אל {{ order.customer.address }}.</p>
+      <p class="lede">המשלוח ב{{ order.delivery_date|delivery_label(lang) }}, בין {{ delivery_window }}, אל {{ order.customer.address|replace('משלוח · ', 'כתובת: ') }}.</p>
       <ul class="summary">
         <li>
           <span>שם</span>

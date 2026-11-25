@@ -234,7 +234,7 @@
           <p><span data-count>0 loaves</span> · <span data-total>₪0</span></p>
           <p data-fulfillment>{% if saved.get('fulfillment') == 'pickup' %}Pickup{% else %}Delivery{% endif %}</p>
           {% if slot %}<p>{{ slot.label }} · {{ slot.window }}</p>{% endif %}
-          <p class="meta">Delivery and pickup are free. Sending the order confirms it for this Friday. Payment follows the method you chose; card details are not collected here.</p>
+          <p class="meta">Delivery and pickup are free.</p>
         </div>
         <p class="form-message" id="order-message" role="alert"></p>
         <button class="pay-button" type="submit">Place order</button>

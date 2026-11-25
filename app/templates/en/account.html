@@ -1,0 +1,98 @@
+{% extends "en/base.html" %}
+{% block title %}My details · לחם בהר{% endblock %}
+{% block body_class %}is-login{% endblock %}
+
+{% block content %}
+  <section class="shell login">
+    <p class="kicker">Account</p>
+    <h1>My details</h1>
+    {% if current_user.is_guest %}
+      <p class="lede">A guest visit does not keep saved details. Create an account to store them.</p>
+      <a class="guest-button" href="/login?lang=en">Create account</a>
+    {% else %}
+      <p class="lede">These details fill in your cart on the next visit. Username: {{ current_user.username }}.</p>
+      {% if notice %}
+        <p class="banner banner-welcome" role="status">Details updated.</p>
+      {% endif %}
+      {% if error %}
+        <p class="banner banner-error" role="alert">{{ error }}</p>
+      {% endif %}
+      <form class="login-card" action="/account" method="post">
+        <input type="hidden" name="lang" value="en">
+        <label>
+          <span>Full name</span>
+          <input name="full_name" required maxlength="100" autocomplete="name" value="{{ saved.get('full_name', '') }}">
+        </label>
+        <label>
+          <span>Phone</span>
+          <input name="phone" type="tel" required maxlength="20" autocomplete="tel" value="{{ saved.get('phone', '') }}">
+        </label>
+        <label>
+          <span>Email</span>
+          <input name="email" type="email" required maxlength="100" autocomplete="email" value="{{ saved.get('email', '') }}">
+        </label>
+        {% set fulfillment = saved.get('fulfillment', 'delivery') %}
+        <fieldset class="fulfillment">
+          <legend>How to receive the order</legend>
+          <div class="fulfillment-choices">
+            <label class="fulfillment-choice">
+              <input type="radio" name="fulfillment" value="delivery" {% if fulfillment != 'pickup' %}checked{% endif %}>
+              <span>Delivery</span>
+            </label>
+            <label class="fulfillment-choice">
+              <input type="radio" name="fulfillment" value="pickup" {% if fulfillment == 'pickup' %}checked{% endif %}>
+              <span>Pickup</span>
+            </label>
+          </div>
+          <label class="fulfillment-panel is-delivery">
+            <span>Delivery town</span>
+            <select name="delivery_city">
+              <option value="" {% if not saved.get('delivery_city') %}selected{% endif %} disabled>Choose a town</option>
+              {% for city in delivery_cities %}
+                <option value="{{ city.id }}" {% if saved.get('delivery_city') == city.id %}selected{% endif %}>{{ city.en }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <label class="fulfillment-panel is-delivery street-address{% if not saved.get('delivery_city') %} is-waiting{% endif %}">
+            <span>Address</span>
+            <textarea name="street_address" maxlength="500" rows="2" autocomplete="street-address">{{ saved.get('street_address', '') }}</textarea>
+          </label>
+          <label class="fulfillment-panel is-pickup">
+            <span>Pickup point</span>
+            <select name="pickup_point">
+              <option value="" {% if not saved.get('pickup_point') %}selected{% endif %} disabled>Choose a pickup point</option>
+              {% for point in pickup_points %}
+                <option value="{{ point.id }}" {% if saved.get('pickup_point') == point.id %}selected{% endif %}>{{ point.en }}</option>
+              {% endfor %}
+            </select>
+          </label>
+        </fieldset>
+        <script>
+          (function () {
+            var form = document.currentScript.previousElementSibling;
+            var delivery = form.querySelector('select[name="delivery_city"]');
+            var pickup = form.querySelector('select[name="pickup_point"]');
+            var street = form.querySelector('textarea[name="street_address"]');
+            function sync() {
+              var isPickup = form.querySelector('input[value="pickup"]').checked;
+              var hasCity = Boolean(delivery.value);
+              delivery.disabled = isPickup;
+              pickup.disabled = !isPickup;
+              delivery.required = !isPickup;
+              pickup.required = isPickup;
+              street.disabled = isPickup || !hasCity;
+              street.required = !isPickup && hasCity;
+              street.closest("label").classList.toggle("is-waiting", !hasCity);
+            }
+            form.querySelectorAll('input[name="fulfillment"]').forEach(function (input) {
+              input.addEventListener("change", sync);
+            });
+            delivery.addEventListener("change", sync);
+            sync();
+          })();
+        </script>
+        <button class="pay-button" type="submit">Update details</button>
+      </form>
+    {% endif %}
+  </section>
+{% endblock %}

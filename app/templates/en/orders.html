@@ -8,7 +8,6 @@
     {% if error %}
       <p class="banner banner-error" role="alert">{{ error }}</p>
     {% endif %}
-    <p class="lede">Order again adds these items to your cart for the open delivery.</p>
     {% if not orders %}
       <p class="cart-empty">No orders yet. <a href="/?lang=en">Choose a loaf</a> from this week's bake.</p>
     {% else %}
@@ -16,7 +15,7 @@
         {% for order in orders %}
           <article class="past-order">
             <h2>{{ order.number }}</h2>
-            <p class="meta">{{ order.delivery|delivery_label(lang) }} · {{ order.status }}</p>
+            <p class="meta">Order date: {{ order.placed|delivery_label(lang) }}<br>Delivery date: {{ order.delivery|delivery_label(lang) }}<br>Order status: {{ order.progress }}</p>
             <ul class="summary">
               {% for line in order.lines %}
                 <li>
@@ -29,6 +28,7 @@
                 <span>{{ order.total|money }}</span>
               </li>
             </ul>
+            <p class="reorder-note">Clicking Order again adds the items to your cart.</p>
             <form method="post" action="/orders/{{ order.number }}/reorder">
               <input type="hidden" name="lang" value="en">
               <button class="pay-button" type="submit">Order again</button>

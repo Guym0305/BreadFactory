@@ -8,7 +8,6 @@
     {% if error %}
       <p class="banner banner-error" role="alert">{{ error }}</p>
     {% endif %}
-    <p class="lede">הזמנה חוזרת מוסיפה את הפריטים לסל למשלוח הפתוח.</p>
     {% if not orders %}
       <p class="cart-empty">אין הזמנות עדיין. <a href="/?lang=he">בחרו כיכר</a> מהאפייה של השבוע.</p>
     {% else %}
@@ -16,7 +15,7 @@
         {% for order in orders %}
           <article class="past-order">
             <h2>{{ order.number }}</h2>
-            <p class="meta">{{ order.delivery|delivery_label(lang) }} · {{ order.status }}</p>
+            <p class="meta">תאריך הזמנה: {{ order.placed|delivery_label(lang) }}<br>תאריך משלוח: {{ order.delivery|delivery_label(lang) }}<br>סטטוס הזמנה: {{ order.progress }}</p>
             <ul class="summary">
               {% for line in order.lines %}
                 <li>
@@ -29,6 +28,7 @@
                 <span>{{ order.total|money }}</span>
               </li>
             </ul>
+            <p class="reorder-note">לחיצה על הזמנה חוזרת תוסיף את הפריטים לסל</p>
             <form method="post" action="/orders/{{ order.number }}/reorder">
               <input type="hidden" name="lang" value="he">
               <button class="pay-button" type="submit">הזמנה חוזרת</button>

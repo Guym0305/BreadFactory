@@ -282,6 +282,33 @@ def register_user(
     return user
 
 
+def update_customer_profile(
+    db: Session,
+    user: User,
+    *,
+    full_name: str,
+    phone: str,
+    email: str,
+    address: str,
+) -> User:
+    if user.is_guest or user.customer is None:
+        raise CheckoutError(t("guest_no_profile"))
+    customer = user.customer
+    customer.full_name = normalize_full_name(full_name)
+    customer.phone = normalize_phone(phone)
+    customer.email = normalize_email(email)
+    customer.address = normalize_address(address)
+    assert_customer_credentials_available(
+        db,
+        phone=customer.phone,
+        email=customer.email,
+        exclude_customer_id=customer.id,
+    )
+    db.commit()
+    db.refresh(customer)
+    return user
+
+
 def authenticate_user(db: Session, username: str, password: str) -> User:
     if not username.strip() or not password:
         raise CheckoutError(t("login_failed"))

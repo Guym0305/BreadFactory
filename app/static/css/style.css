@@ -189,11 +189,73 @@ label span,
   font-weight: 500;
 }
 
+.account-menu {
+  position: relative;
+}
+
 .account-chip {
   display: inline-flex;
   align-items: center;
   min-height: 44px;
   color: var(--color-olive);
+}
+
+button.account-chip {
+  -webkit-appearance: none;
+  appearance: none;
+  border: 0;
+  border-bottom: 1px solid transparent;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+}
+
+.account-menu:hover .account-chip,
+.account-menu.is-open .account-chip,
+.account-chip:focus-visible {
+  border-bottom-color: var(--color-gold);
+}
+
+.account-panel {
+  display: none;
+  position: absolute;
+  z-index: 30;
+  top: 100%;
+  inset-inline-end: 0;
+  min-width: 11.5rem;
+  padding: 0.3rem 0;
+  background: var(--color-parchment);
+  border: 1px solid var(--color-clay);
+  box-shadow: 0 10px 28px rgba(26, 26, 26, 0.08);
+}
+
+.account-panel a {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0.35rem 1rem;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.account-panel a + a {
+  border-top: 1px solid var(--color-clay);
+}
+
+.account-panel a:hover,
+.account-panel a[aria-current="page"] {
+  background: rgba(62, 74, 52, 0.08);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .account-menu:hover .account-panel,
+  .account-menu:focus-within .account-panel {
+    display: grid;
+  }
+}
+
+.account-menu.is-open .account-panel {
+  display: grid;
 }
 
 .logout-form {
@@ -311,11 +373,10 @@ a.header-note[aria-current="page"] {
 }
 
 .brand-logo {
-  width: clamp(6rem, 18vw, 6.75rem);
-  height: clamp(6rem, 18vw, 6.75rem);
+  width: clamp(9.5rem, 42vw, 12.5rem);
+  height: auto;
   flex: none;
-  border-radius: 50%;
-  object-fit: cover;
+  background: transparent;
 }
 
 .brand-lockup h1.brand-display {
@@ -1396,8 +1457,7 @@ html[lang="he"] .fulfillment legend {
   }
 
   .brand-logo {
-    width: 7.5rem;
-    height: 7.5rem;
+    width: 13rem;
   }
 
   .hero-title {
@@ -1682,9 +1742,13 @@ label.delivery-option {
   font-size: clamp(1.45rem, 2vw, 1.9rem);
 }
 
+.reorder-note {
+  margin: 0.85rem 0 0.45rem;
+}
+
 .past-order .pay-button {
   width: auto;
-  margin-top: 0.9rem;
+  margin-top: 0;
 }
 
 .cart-empty {
